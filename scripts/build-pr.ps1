@@ -1,0 +1,352 @@
+#!/usr/bin/env pwsh
+<#
+.SYNOPSIS
+    Runs the same checks as the Windows section of pr.yaml locally.
+
+.DESCRIPTION
+    Replicates the PR workflow's Windows stage locally so you can verify
+    your changes will pass before pushing. Runs in order:
+      1. Restore and build (Release)
+      2. Run all tests across all target frameworks
+      3. Generate coverage report and enforce threshold
+      4. Run DevSkim security scan
+      5. Run gitleaks secrets scan
+
+.PARAMETER SkipTests
+    Skip test execution (build only).
+
+.PARAMETER SkipCoverage
+    Skip coverage report generation and threshold enforcement.
+
+.PARAMETER SkipSecurity
+    Skip DevSkim and gitleaks scans.
+
+.PARAMETER CoverageThreshold
+    Minimum coverage percentage required. Defaults to 90.
+
+.EXAMPLE
+    pwsh ./scripts/build-pr.ps1
+    pwsh ./scripts/build-pr.ps1 -SkipSecurity
+    pwsh ./scripts/build-pr.ps1 -CoverageThreshold 80
+#>
+param(
+    [switch]$SkipTests,
+    [switch]$SkipCoverage,
+    [switch]$SkipSecurity,
+    [int]$CoverageThreshold = 90
+)
+
+$ErrorActionPreference = 'Stop'
+$failed = @()
+
+function Write-Step($message) {
+    Write-Host ""
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host $message -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
+}
+
+function Write-Pass($message) {
+    Write-Host $message -ForegroundColor Green
+}
+
+function Write-Fail($message) {
+    Write-Host $message -ForegroundColor Red
+}
+
+# ============================================================================
+# STEP 1: Restore and Build
+# ============================================================================
+Write-Step "Step 1: Restore and Build (Release)"
+
+dotnet restore
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "Restore failed"
+    $failed += "Restore"
+}
+else {
+    dotnet build --no-restore --configuration Release
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Build failed"
+        $failed += "Build"
+    }
+    else {
+        Write-Pass "Build succeeded"
+    }
+}
+
+# ============================================================================
+# STEP 2: Run Tests
+# ============================================================================
+if (-not $SkipTests -and $failed.Count -eq 0) {
+    Write-Step "Step 2: Run Tests (all target frameworks)"
+
+    $testProjects = @(Get-ChildItem -Path './tests' -Recurse -File -Include '*.csproj', '*.vbproj', '*.fsproj' -ErrorAction SilentlyContinue)
+
+    if ($testProjects.Count -eq 0) {
+        # If ./src has projects, fail — silent skip would diverge from CI's
+        # strict gate. If neither ./src nor ./tests has projects (template-pack
+        # / in-dev repos), the skip is legitimate.
+        $srcHasProjects = @(Get-ChildItem -Path './src' -Recurse -File -Include '*.csproj','*.vbproj','*.fsproj' -ErrorAction SilentlyContinue).Count -gt 0
+        if ($srcHasProjects) {
+            Write-Fail "./tests has no test projects but ./src contains projects — refusing to silently skip the coverage gate."
+            $failed += "Tests"
+        }
+        else {
+            Write-Host "No test projects found in ./tests and no ./src projects — skipping (template-pack / in-dev shape)."
+        }
+    }
+    else {
+        foreach ($testProj in $testProjects) {
+            Write-Host ""
+            Write-Host "Testing: $($testProj.FullName)" -ForegroundColor White
+
+            $content = Get-Content $testProj.FullName -Raw
+            $tfmMatch = [regex]::Match($content, '<TargetFramework[s]?>([^<]+)</TargetFramework[s]?>')
+
+            if (-not $tfmMatch.Success) {
+                Write-Host "  No target frameworks found — skipping" -ForegroundColor Yellow
+                continue
+            }
+
+            $frameworks = $tfmMatch.Groups[1].Value -split ';' |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { $_ -match '^net(5\.0|6\.0|7\.0|8\.0|9\.0|10\.0|462|47|471|472|48|481|coreapp3\.1)$' }
+
+            if ($frameworks.Count -eq 0) {
+                Write-Host "  No compatible frameworks — skipping" -ForegroundColor Yellow
+                continue
+            }
+
+            Write-Host "  Frameworks: $($frameworks -join ', ')"
+
+            foreach ($fw in $frameworks) {
+                Write-Host "  Testing: $fw" -ForegroundColor Yellow
+
+                $testArgs = @(
+                    $testProj.FullName,
+                    '--configuration', 'Release',
+                    '--framework', $fw,
+                    '--logger', 'console;verbosity=normal'
+                )
+
+                if ($fw -match '^net([5-9]|[1-9][0-9]+)\.') {
+                    $testArgs += '--collect:XPlat Code Coverage'
+                    $testArgs += '--results-directory'
+                    $testArgs += './TestResults'
+                    if (Test-Path 'coverlet.runsettings') {
+                        $testArgs += '--settings'
+                        $testArgs += 'coverlet.runsettings'
+                    }
+                }
+
+                dotnet test @testArgs
+
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Fail "  Tests failed for $fw"
+                    $failed += "Tests ($fw)"
+                    break
+                }
+            }
+
+            if ($failed.Count -gt 0) { break }
+        }
+
+        if ($failed.Count -eq 0) {
+            Write-Pass "All tests passed"
+        }
+    }
+}
+
+# ============================================================================
+# STEP 3: Coverage Report and Threshold
+# ============================================================================
+if (-not $SkipTests -and -not $SkipCoverage -and $failed.Count -eq 0) {
+    Write-Step "Step 3: Coverage Report (threshold: ${CoverageThreshold}%)"
+
+    $coverageFiles = Get-ChildItem -Path TestResults -Recurse -Filter coverage.cobertura.xml -ErrorAction SilentlyContinue
+
+    if (-not $coverageFiles) {
+        Write-Host "No coverage files found — skipping"
+    }
+    else {
+        # Install ReportGenerator if not present
+        $rgPath = Get-Command reportgenerator -ErrorAction SilentlyContinue
+        if (-not $rgPath) {
+            Write-Host "Installing ReportGenerator..."
+            dotnet tool update -g dotnet-reportgenerator-globaltool 2>$null
+            if ($LASTEXITCODE -ne 0) { dotnet tool install -g dotnet-reportgenerator-globaltool }
+            # Ensure global tools dir is on PATH for this session. The .NET
+            # installer normally adds it to the user's profile, but a fresh
+            # shell or a pwsh-invoked-from-script session may not have it yet.
+            $globalToolsDir = if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+                Join-Path $env:USERPROFILE '.dotnet\tools'
+            } else {
+                Join-Path $HOME '.dotnet/tools'
+            }
+            if (Test-Path $globalToolsDir -PathType Container) {
+                $sep = [IO.Path]::PathSeparator
+                $pathSegments = $env:PATH -split [regex]::Escape($sep)
+                if ($pathSegments -notcontains $globalToolsDir) {
+                    $env:PATH = "$globalToolsDir$sep$env:PATH"
+                }
+            }
+        }
+
+        reportgenerator `
+            -reports:"TestResults/**/coverage.cobertura.xml" `
+            -targetdir:"CoverageReport" `
+            -reporttypes:"Html;TextSummary;MarkdownSummaryGithub;CsvSummary"
+
+        if (Test-Path "CoverageReport/Summary.txt") {
+            Write-Host ""
+            Get-Content "CoverageReport/Summary.txt"
+            Write-Host ""
+
+            $failedProjects = @()
+            $matched = 0
+            foreach ($line in (Get-Content "CoverageReport/Summary.txt")) {
+                if ($line -match '^\s*(\S+)\s+(\d+(?:\.\d+)?)%\s*$' -and $line -notmatch '^\s*Summary') {
+                    $module = $Matches[1]
+                    $percent = [int][math]::Floor([double]$Matches[2])
+                    $matched++
+
+                    if ($percent -lt $CoverageThreshold) {
+                        Write-Fail "  $module — ${percent}% (below ${CoverageThreshold}%)"
+                        $failedProjects += "$module (${percent}%)"
+                    }
+                    else {
+                        Write-Pass "  $module — ${percent}%"
+                    }
+                }
+            }
+
+            if ($matched -eq 0) {
+                # Mirror pr.yaml: a parser/format drift that matches zero modules
+                # must fail loudly, not silently pass the gate.
+                Write-Fail "Coverage parser matched 0 modules in Summary.txt — regex or report format is out of sync. Refusing to silently pass the gate."
+                $failed += "Coverage"
+            }
+            elseif ($failedProjects.Count -gt 0) {
+                Write-Fail "Coverage gate FAILED: $($failedProjects -join ', ')"
+                $failed += "Coverage"
+            }
+            else {
+                Write-Pass "Coverage gate passed"
+            }
+        }
+        else {
+            # Diverged from pr.yaml behavior in the past — that would let a local
+            # "All checks passed" silently hide ReportGenerator failures while CI
+            # rejected the same situation. Fail loudly here too, so local matches CI.
+            Write-Fail "Coverage report not generated (CoverageReport/Summary.txt missing) — ReportGenerator likely failed."
+            $failed += "Coverage"
+        }
+    }
+}
+
+# ============================================================================
+# STEP 4: DevSkim Security Scan
+# ============================================================================
+if (-not $SkipSecurity) {
+    Write-Step "Step 4: DevSkim Security Scan"
+
+    $devskim = Get-Command devskim -ErrorAction SilentlyContinue
+    if (-not $devskim) {
+        Write-Host "Installing DevSkim CLI..."
+        dotnet tool install --global Microsoft.CST.DevSkim.CLI
+    }
+
+    devskim analyze `
+        --source-code . `
+        --file-format text `
+        --output-file devskim-results.txt `
+        --ignore-rule-ids DS176209 `
+        --ignore-globs "**/api/**,**/CoverageReport/**,**/TestResults/**"
+
+    if (Test-Path "devskim-results.txt") {
+        $results = Get-Content "devskim-results.txt" -Raw
+        if ($results -and $results -match '(?i)(error|critical|high)') {
+            Write-Host $results
+            Write-Fail "DevSkim found security issues"
+            $failed += "DevSkim"
+        }
+        else {
+            Write-Pass "No critical security issues found"
+        }
+        Remove-Item "devskim-results.txt" -ErrorAction SilentlyContinue
+    }
+    else {
+        Write-Pass "No security issues found"
+    }
+}
+
+# ============================================================================
+# STEP 5: Gitleaks Secrets Scan
+# ============================================================================
+if (-not $SkipSecurity) {
+    Write-Step "Step 5: Gitleaks Secrets Scan"
+
+    $gitleaks = Get-Command gitleaks -ErrorAction SilentlyContinue
+    if (-not $gitleaks) {
+        Write-Host "gitleaks not found — installing..."
+        $version = "8.24.0"
+        if ($IsWindows -or $env:OS -match 'Windows') {
+            $archive = "gitleaks_${version}_windows_x64.zip"
+            $url = "https://github.com/gitleaks/gitleaks/releases/download/v${version}/$archive"
+            $dest = Join-Path $env:LOCALAPPDATA "gitleaks"
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            $zip = Join-Path $env:TEMP $archive
+            # -UseBasicParsing: required on Windows PowerShell 5.1, where the
+            # default parser uses the IE engine and throws on stock/minimal
+            # Windows installs. PowerShell 7+ accepts it as a no-op.
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            Expand-Archive -Path $zip -DestinationPath $dest -Force
+            Remove-Item $zip -ErrorAction SilentlyContinue
+            $env:PATH = "$dest;$env:PATH"
+        }
+        else {
+            $archive = "gitleaks_${version}_linux_x64.tar.gz"
+            $url = "https://github.com/gitleaks/gitleaks/releases/download/v${version}/$archive"
+            # Install to a user-writable location instead of /usr/local/bin
+            # (which would require sudo for most local dev shells). $HOME/.local/bin
+            # is on PATH by default on most Linux distros and macOS; if not, prepend it.
+            $localBin = Join-Path $HOME ".local/bin"
+            New-Item -ItemType Directory -Force -Path $localBin | Out-Null
+            # Use 'tar -f -' so extraction reads the gitleaks archive from
+            # stdin. GNU tar without '-f' defaults to /dev/tape (or another
+            # default depending on the TAPE env var), which can hang silently
+            # in CI / fresh shells.
+            curl -sSfL $url | tar -xz -f - -C $localBin gitleaks
+            if (-not ($env:PATH -split [IO.Path]::PathSeparator | Where-Object { $_ -eq $localBin })) {
+                $env:PATH = "$localBin$([IO.Path]::PathSeparator)$env:PATH"
+            }
+        }
+    }
+
+    gitleaks detect --source . --verbose --redact
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Gitleaks found secrets"
+        $failed += "Gitleaks"
+    }
+    else {
+        Write-Pass "No secrets detected"
+    }
+}
+
+# ============================================================================
+# Summary
+# ============================================================================
+Write-Host ""
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "SUMMARY" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
+
+if ($failed.Count -gt 0) {
+    Write-Fail "FAILED: $($failed -join ', ')"
+    exit 1
+}
+else {
+    Write-Pass "All checks passed"
+    exit 0
+}
