@@ -2,39 +2,39 @@
 _layout: landing
 ---
 
-# {{PROJECT_NAME}} Documentation
+# Wolfgang.Demo.EnterpriseServiceBus Documentation
 
-Welcome to the {{PROJECT_NAME}} documentation. This site contains comprehensive guides, API reference, and examples to help you get started.
+Welcome to the Wolfgang.Demo.EnterpriseServiceBus documentation. This site contains comprehensive guides, API reference, and examples to help you get started.
 
 ## Quick Links
 
 - [Getting Started](docs/getting-started.md) - Learn the basics
-- [API Reference](xref:{{PROJECT_NAME}}) - Complete API documentation
-- [GitHub Repository]({{GITHUB_REPO_URL}}) - View source code
+- [API Reference](xref:Wolfgang.Demo.EnterpriseServiceBus) - Complete API documentation
+- [GitHub Repository](https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo) - View source code
 
-## About {{PROJECT_NAME}}
+## About Wolfgang.Demo.EnterpriseServiceBus
 
-{{PROJECT_DESCRIPTION}}
+An interactive demo of how an ESB can help your organization connect various systems in realtime
 
 ## Installation
 
 ```bash
-dotnet add package {{PACKAGE_NAME}}
+dotnet add package Wolfgang.Demo.EnterpriseServiceBus
 ```
 
 ## Documentation Sections
 
 ### 📖 [Documentation](docs/getting-started.md)
-Step-by-step guides and tutorials to help you use {{PROJECT_NAME}} effectively.
+Step-by-step guides and tutorials to help you use Wolfgang.Demo.EnterpriseServiceBus effectively.
 
-### 📚 [API Reference](xref:{{PROJECT_NAME}})
+### 📚 [API Reference](xref:Wolfgang.Demo.EnterpriseServiceBus)
 Complete API documentation automatically generated from source code XML comments.
 
 ## Additional Resources
 
-- [Contributing Guidelines]({{GITHUB_REPO_URL}}/blob/main/CONTRIBUTING.md)
-- [Code of Conduct]({{GITHUB_REPO_URL}}/blob/main/CODE_OF_CONDUCT.md)
-- [License]({{GITHUB_REPO_URL}}/blob/main/LICENSE)
+- [Contributing Guidelines](https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo/blob/main/CODE_OF_CONDUCT.md)
+- [License](https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo/blob/main/LICENSE)
 
 ---
 

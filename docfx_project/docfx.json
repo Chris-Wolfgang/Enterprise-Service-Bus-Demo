@@ -46,8 +46,8 @@
       "modern"
     ],
     "globalMetadata": {
-      "_appName": "{{PROJECT_NAME}}",
-      "_appTitle": "{{PROJECT_NAME}} Documentation",
+      "_appName": "Wolfgang.Demo.EnterpriseServiceBus",
+      "_appTitle": "Wolfgang.Demo.EnterpriseServiceBus Documentation",
       "_appLogoPath": "logo.svg",
       "_appFaviconPath": "favicon.svg",
       "_enableSearch": true,
@@ -56,7 +56,7 @@
       "_disableTocFilter": false,
       "_enableDarkMode": true,
       "colorMode": "dark",
-      "_baseUrl": "{{DOCS_URL}}",
+      "_baseUrl": "https://Chris-Wolfgang.github.io/Enterprise-Service-Bus-Demo/",
       "pdf": true
     }
   }
