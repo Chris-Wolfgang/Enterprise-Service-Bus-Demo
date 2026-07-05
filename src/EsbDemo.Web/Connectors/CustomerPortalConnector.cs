@@ -41,7 +41,8 @@ public sealed class CustomerPortalConnector
             {
                 ["CustomerId"] = cust.CustNum,
                 ["Name"]       = cust.Name,
-                ["Email"]      = cust.Email ?? ""
+                ["Email"]      = cust.Email ?? "",
+                ["Phone"]      = cust.Phone ?? ""
             },
             isUserInitiated: true
         );
@@ -68,12 +69,14 @@ public sealed class CustomerPortalConnector
             {
                 fields.TryGetValue("Name",  out var name);
                 fields.TryGetValue("Email", out var email);
+                fields.TryGetValue("Phone", out var phone);
 
                 db.Customers.Add(new PortalCustomer
                 {
                     CustNum     = custNum,
                     Name        = name ?? custNum,
                     Email       = email,
+                    Phone       = phone,
                     IsActive    = true,
                     CreatedDate = DateTime.UtcNow
                 });
@@ -87,6 +90,7 @@ public sealed class CustomerPortalConnector
         {
             if (fields.TryGetValue("Name",  out var name))  cust.Name  = name;
             if (fields.TryGetValue("Email", out var email)) cust.Email = email;
+            if (fields.TryGetValue("Phone", out var phone)) cust.Phone = phone;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke();
         }

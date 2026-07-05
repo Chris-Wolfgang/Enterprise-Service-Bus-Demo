@@ -15,6 +15,9 @@ public sealed class PortalCustomer
     [MaxLength(60)]
     public string? Email { get; set; }
 
+    [MaxLength(15)]
+    public string? Phone { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     [MaxLength(50)]

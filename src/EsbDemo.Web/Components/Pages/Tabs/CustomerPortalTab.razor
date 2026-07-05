@@ -14,6 +14,7 @@
                 <th>Cust #</th>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Phone</th>
                 <th>Portal Login</th>
                 <th>Status</th>
                 <th>Registered</th>
@@ -44,6 +45,16 @@
                             @(cust.Email ?? "—")
                         }
                     </td>
+                    <td>
+                        @if (cust.CustNum == _editId)
+                        {
+                            <input class="cell-input cell-input-narrow" @bind="_editPhone" @bind:event="oninput" />
+                        }
+                        else
+                        {
+                            @(cust.Phone ?? "—")
+                        }
+                    </td>
                     <td class="mono small">@(cust.PortalLogin ?? "—")</td>
                     <td><span class="badge @(cust.IsActive ? "status-active" : "status-inactive")">@(cust.IsActive ? "Active" : "Inactive")</span></td>
                     <td class="mono small">@cust.CreatedDate.ToString("yyyy-MM-dd")</td>
@@ -51,7 +62,7 @@
                 @if (cust.CustNum == _editId)
                 {
                     <tr class="edit-row">
-                        <td colspan="6">
+                        <td colspan="7">
                             <div class="edit-actions">
                                 <button class="btn-save" @onclick="SaveEdit">Save &amp; Publish</button>
                                 <button class="btn-cancel" @onclick="CancelEdit">Cancel</button>
@@ -70,6 +81,7 @@
     private string _editId = "";
     private string _editName = "";
     private string _editEmail = "";
+    private string _editPhone = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -94,6 +106,7 @@
         _editId = custNum;
         _editName = cust.Name;
         _editEmail = cust.Email ?? "";
+        _editPhone = cust.Phone ?? "";
     }
 
     private async Task SaveEdit()
@@ -102,6 +115,7 @@
         if (cust is null) return;
         cust.Name = _editName;
         cust.Email = _editEmail;
+        cust.Phone = _editPhone;
         Db.Customers.Update(cust);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
