@@ -1,0 +1,40 @@
+@inherits LayoutComponentBase
+@inject MonitorService Monitor
+
+<div class="esb-layout">
+    <header class="esb-header">
+        <span class="esb-title">ESB Demo</span>
+        <div class="bus-selector">
+            <label for="bus-select">Bus:</label>
+            <select id="bus-select" @bind="_selectedBus" @bind:after="OnBusChanged" class="bus-select">
+                <option value="Mock">Mock In-Memory</option>
+                <option value="Kafka" disabled>Apache Kafka (coming soon)</option>
+                <option value="RabbitMQ" disabled>RabbitMQ Streams (coming soon)</option>
+            </select>
+        </div>
+        <span class="bus-badge">@Monitor.SelectedBus</span>
+    </header>
+    <div class="esb-body">
+        <nav class="esb-app-panel">
+            <AppPanel />
+        </nav>
+        <main class="esb-monitor-area">
+            @Body
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private string _selectedBus = "Mock";
+
+    private void OnBusChanged()
+    {
+        Monitor.SetBus(_selectedBus);
+    }
+}

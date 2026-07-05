@@ -1,0 +1,152 @@
+@inject CrmDbContext Db
+@inject CrmConnector Connector
+@implements IDisposable
+
+<div class="app-tab crm-tab">
+    <div class="app-tab-header">
+        <h2>CRM — Accounts</h2>
+        <span class="app-tag crm-tag">Microsoft Dynamics style</span>
+    </div>
+
+    <table class="data-grid">
+        <thead>
+            <tr>
+                <th>Account #</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Modified</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var acct in _accounts)
+            {
+                var isEditing = acct.AccountId == _editId;
+                <tr class="@(isEditing ? "editing" : "")" @onclick="() => StartEdit(acct.AccountId)">
+                    <td class="mono">@(acct.AccountNumber ?? "—")</td>
+                    <td>
+                        @if (isEditing)
+                        {
+                            <input class="cell-input" @bind="_editName" @bind:event="oninput" @onclick:stopPropagation />
+                        }
+                        else
+                        {
+                            @acct.Name
+                        }
+                    </td>
+                    <td>
+                        @if (isEditing)
+                        {
+                            <input class="cell-input" @bind="_editEmail" @bind:event="oninput" @onclick:stopPropagation />
+                        }
+                        else
+                        {
+                            @(acct.EMailAddress1 ?? "—")
+                        }
+                    </td>
+                    <td>
+                        @if (isEditing)
+                        {
+                            <input class="cell-input cell-input-narrow" @bind="_editPhone" @bind:event="oninput" @onclick:stopPropagation />
+                        }
+                        else
+                        {
+                            @(acct.Telephone1 ?? "—")
+                        }
+                    </td>
+                    <td><span class="badge type-badge">@acct.AccountTypeCode</span></td>
+                    <td @onclick:stopPropagation>
+                        <button class="status-toggle @(acct.StatusCode == AccountStatusCode.Active ? "status-toggle-active" : "status-toggle-inactive")"
+                                @onclick="() => ToggleStatus(acct)">
+                            @(acct.StatusCode == AccountStatusCode.Active ? "Active" : "Inactive")
+                        </button>
+                    </td>
+                    <td class="mono small">@acct.ModifiedOn.ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+                @if (isEditing)
+                {
+                    <tr class="edit-row">
+                        <td colspan="7">
+                            <div class="edit-actions">
+                                <button class="btn-save" @onclick="SaveEdit" @onclick:stopPropagation>Save &amp; Publish</button>
+                                <button class="btn-cancel" @onclick="CancelEdit" @onclick:stopPropagation>Cancel</button>
+                                <span class="edit-hint">Publishes <code>account.updated</code> · Click status button to publish <code>account.deactivated</code> / <code>account.activated</code></span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<CrmAccount> _accounts = [];
+    private Guid _editId = Guid.Empty;
+    private string _editName = "";
+    private string _editEmail = "";
+    private string _editPhone = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _accounts = await Db.Accounts.AsNoTracking().OrderBy(a => a.AccountNumber).ToListAsync();
+        Connector.DataChanged += OnDataChanged;
+    }
+
+    public void Dispose() => Connector.DataChanged -= OnDataChanged;
+
+    private void OnDataChanged() =>
+        _ = InvokeAsync(async () =>
+        {
+            _accounts = await Db.Accounts.AsNoTracking().OrderBy(a => a.AccountNumber).ToListAsync();
+            StateHasChanged();
+        });
+
+    private void StartEdit(Guid id)
+    {
+        if (_editId == id) { _editId = Guid.Empty; return; }
+        var acct = _accounts.FirstOrDefault(a => a.AccountId == id);
+        if (acct is null) return;
+        _editId = id;
+        _editName  = acct.Name;
+        _editEmail = acct.EMailAddress1 ?? "";
+        _editPhone = acct.Telephone1 ?? "";
+    }
+
+    private async Task SaveEdit()
+    {
+        var acct = _accounts.FirstOrDefault(a => a.AccountId == _editId);
+        if (acct is null) return;
+
+        acct.Name          = _editName;
+        acct.EMailAddress1 = _editEmail;
+        acct.Telephone1    = _editPhone;
+        acct.ModifiedOn    = DateTime.UtcNow;
+        Db.Accounts.Update(acct);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+
+        Connector.PublishAccountUpdated(acct);
+
+        _editId = Guid.Empty;
+    }
+
+    private async Task ToggleStatus(CrmAccount acct)
+    {
+        var newStatus = acct.StatusCode == AccountStatusCode.Active
+            ? AccountStatusCode.Inactive
+            : AccountStatusCode.Active;
+
+        acct.StatusCode = newStatus;
+        acct.ModifiedOn = DateTime.UtcNow;
+        Db.Accounts.Update(acct);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+
+        Connector.PublishStatusChanged(acct);
+    }
+
+    private void CancelEdit() => _editId = Guid.Empty;
+}

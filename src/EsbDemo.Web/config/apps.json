@@ -1,0 +1,55 @@
+[
+  {
+    "name": "CRM",
+    "displayOrder": 1,
+    "defaultOnline": true,
+    "publishes": [ "account.create", "account.updated", "account.deactivated", "account.activated" ],
+    "subscribes": [ "account.created", "account.updated", "account.deactivated", "account.activated", "order.shipped" ],
+    "autoResponses": []
+  },
+  {
+    "name": "ERP",
+    "displayOrder": 2,
+    "defaultOnline": true,
+    "publishes": [ "account.created", "account.updated", "order.placed", "inventory.update" ],
+    "subscribes": [ "account.create", "account.updated", "account.deactivated", "account.activated", "order.place" ],
+    "autoResponses": [
+      { "on": "account.create", "publish": "account.created" },
+      { "on": "order.place",    "publish": "order.placed" }
+    ]
+  },
+  {
+    "name": "eCommerce",
+    "displayOrder": 3,
+    "defaultOnline": true,
+    "publishes": [ "account.create", "account.updated", "order.place" ],
+    "subscribes": [ "account.created", "account.updated", "account.deactivated", "account.activated", "order.placed", "order.shipped" ],
+    "autoResponses": []
+  },
+  {
+    "name": "WMS",
+    "displayOrder": 4,
+    "defaultOnline": true,
+    "publishes": [ "order.shipped", "inventory.update" ],
+    "subscribes": [ "order.placed" ],
+    "autoResponses": [
+      { "on": "order.placed", "publish": "order.shipped" }
+    ]
+  },
+  {
+    "name": "Customer Portal",
+    "displayOrder": 5,
+    "defaultOnline": true,
+    "publishes": [ "account.updated" ],
+    "subscribes": [ "account.created", "account.updated", "account.deactivated", "account.activated", "order.shipped" ],
+    "autoResponses": []
+  },
+  {
+    "name": "Data Warehouse",
+    "displayOrder": 6,
+    "defaultOnline": true,
+    "publishes": [],
+    "subscribes": [ "account.created", "account.updated", "account.deactivated", "account.activated", "order.placed", "order.shipped", "inventory.update" ],
+    "autoResponses": []
+  }
+]

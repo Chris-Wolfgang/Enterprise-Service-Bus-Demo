@@ -1,0 +1,101 @@
+@inject CustomerPortalDbContext Db
+@inject CustomerPortalConnector Connector
+@implements IDisposable
+
+<div class="app-tab portal-tab">
+    <div class="app-tab-header">
+        <h2>Customer Portal — Accounts</h2>
+        <span class="app-tag portal-tag">Self-service portal</span>
+    </div>
+
+    <table class="data-grid">
+        <thead>
+            <tr>
+                <th>Cust #</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Portal Login</th>
+                <th>Status</th>
+                <th>Registered</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var cust in _customers)
+            {
+                <tr class="@(cust.CustNum == _editId ? "editing" : "")" @onclick="() => StartEdit(cust.CustNum)">
+                    <td class="mono">@cust.CustNum</td>
+                    <td>
+                        @if (cust.CustNum == _editId)
+                        {
+                            <input class="cell-input" @bind="_editName" @bind:event="oninput" />
+                        }
+                        else
+                        {
+                            @cust.Name
+                        }
+                    </td>
+                    <td>@(cust.Email ?? "—")</td>
+                    <td class="mono small">@(cust.PortalLogin ?? "—")</td>
+                    <td><span class="badge @(cust.IsActive ? "status-active" : "status-inactive")">@(cust.IsActive ? "Active" : "Inactive")</span></td>
+                    <td class="mono small">@cust.CreatedDate.ToString("yyyy-MM-dd")</td>
+                </tr>
+                @if (cust.CustNum == _editId)
+                {
+                    <tr class="edit-row">
+                        <td colspan="6">
+                            <div class="edit-actions">
+                                <button class="btn-save" @onclick="SaveEdit">Save &amp; Publish</button>
+                                <button class="btn-cancel" @onclick="CancelEdit">Cancel</button>
+                                <span class="edit-hint">Saving will publish an <code>account.update</code> message to the ESB</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<PortalCustomer> _customers = [];
+    private string _editId = "";
+    private string _editName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+        Connector.DataChanged += OnDataChanged;
+    }
+
+    public void Dispose() => Connector.DataChanged -= OnDataChanged;
+
+    private void OnDataChanged() =>
+        _ = InvokeAsync(async () =>
+        {
+            _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+            StateHasChanged();
+        });
+
+    private void StartEdit(string custNum)
+    {
+        if (_editId == custNum) { _editId = ""; return; }
+        var cust = _customers.FirstOrDefault(c => c.CustNum == custNum);
+        if (cust is null) return;
+        _editId = custNum;
+        _editName = cust.Name;
+    }
+
+    private async Task SaveEdit()
+    {
+        var cust = _customers.FirstOrDefault(c => c.CustNum == _editId);
+        if (cust is null) return;
+        cust.Name = _editName;
+        Db.Customers.Update(cust);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+        Connector.PublishAccountUpdated(cust);
+        _editId = "";
+    }
+
+    private void CancelEdit() => _editId = "";
+}

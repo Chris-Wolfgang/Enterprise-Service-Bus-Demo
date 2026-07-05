@@ -1,0 +1,90 @@
+using EsbDemo.Web.Data.DataWarehouse;
+using EsbDemo.Web.Services;
+using Microsoft.EntityFrameworkCore;
+
+namespace EsbDemo.Web.Connectors;
+
+/// <summary>
+/// Receive-only connector for the Data Warehouse.
+/// Listens for ESB account events and upserts <see cref="DwCustomer"/> records.
+/// </summary>
+public sealed class DataWarehouseConnector
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+
+
+    /// <summary>Fired after an inbound ESB message updates the Data Warehouse database.</summary>
+    public event Action? DataChanged;
+
+
+    public DataWarehouseConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        _scopeFactory = scopeFactory;
+        monitor.RegisterHandler("Data Warehouse", HandleInboundAsync);
+    }
+
+
+    private async Task HandleInboundAsync(string topic, Dictionary<string, string> fields)
+    {
+        if (!fields.TryGetValue("CustomerId", out var custNum) || string.IsNullOrEmpty(custNum))
+            return;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataWarehouseDbContext>();
+
+        var row = await db.Customers.FirstOrDefaultAsync(
+            c => c.CustNum == custNum
+        ).ConfigureAwait(false);
+
+        if (string.Equals(topic, "account.created", StringComparison.Ordinal))
+        {
+            if (row is null)
+            {
+                fields.TryGetValue("Name",  out var name);
+                fields.TryGetValue("Email", out var email);
+                fields.TryGetValue("Phone", out var phone);
+
+                row = new DwCustomer
+                {
+                    CustNum       = custNum,
+                    Name          = name ?? custNum,
+                    Email         = email,
+                    Phone         = phone,
+                    IsActive      = true,
+                    FirstSeenDate = DateTime.UtcNow,
+                    LastUpdated   = DateTime.UtcNow
+                };
+                db.Customers.Add(row);
+                await db.SaveChangesAsync().ConfigureAwait(false);
+                DataChanged?.Invoke();
+            }
+        }
+        else if (string.Equals(topic, "account.updated", StringComparison.Ordinal))
+        {
+            if (row is null) return;
+            if (fields.TryGetValue("Name",  out var name))  row.Name  = name;
+            if (fields.TryGetValue("Email", out var email)) row.Email = email;
+            if (fields.TryGetValue("Phone", out var phone)) row.Phone = phone;
+            row.LastUpdated = DateTime.UtcNow;
+            await db.SaveChangesAsync().ConfigureAwait(false);
+            DataChanged?.Invoke();
+        }
+        else if (string.Equals(topic, "account.deactivated", StringComparison.Ordinal))
+        {
+            if (row is null) return;
+            row.IsActive    = false;
+            row.LastUpdated = DateTime.UtcNow;
+            await db.SaveChangesAsync().ConfigureAwait(false);
+            DataChanged?.Invoke();
+        }
+        else if (string.Equals(topic, "account.activated", StringComparison.Ordinal))
+        {
+            if (row is null) return;
+            row.IsActive    = true;
+            row.LastUpdated = DateTime.UtcNow;
+            await db.SaveChangesAsync().ConfigureAwait(false);
+            DataChanged?.Invoke();
+        }
+    }
+}

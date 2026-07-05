@@ -1,0 +1,62 @@
+@inject DataWarehouseDbContext Db
+@inject DataWarehouseConnector Connector
+@implements IDisposable
+
+<div class="app-tab dw-tab">
+    <div class="app-tab-header">
+        <h2>Data Warehouse — Customers</h2>
+        <span class="app-tag dw-tag">Read-only / receive-only</span>
+    </div>
+
+    <table class="data-grid">
+        <thead>
+            <tr>
+                <th>Cust #</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Type</th>
+                <th>Terms</th>
+                <th>Status</th>
+                <th>Loaded</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var cust in _customers)
+            {
+                <tr>
+                    <td class="mono">@cust.CustNum</td>
+                    <td>@cust.Name</td>
+                    <td>@(cust.Email ?? "—")</td>
+                    <td>@(cust.Phone ?? "—")</td>
+                    <td>@(cust.CustType ?? "—")</td>
+                    <td>@(cust.Terms ?? "—")</td>
+                    <td><span class="badge @(cust.IsActive ? "status-active" : "status-inactive")">@(cust.IsActive ? "Active" : "Inactive")</span></td>
+                    <td class="mono small">@cust.LastUpdated.ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <div class="dw-note">
+        <span>📥 Data Warehouse is receive-only. Records update automatically when ESB events arrive.</span>
+    </div>
+</div>
+
+@code {
+    private List<DwCustomer> _customers = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _customers = await Db.Customers.OrderBy(c => c.CustNum).ToListAsync();
+        Connector.DataChanged += OnDataChanged;
+    }
+
+    public void Dispose() => Connector.DataChanged -= OnDataChanged;
+
+    private void OnDataChanged() =>
+        _ = InvokeAsync(async () =>
+        {
+            _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+            StateHasChanged();
+        });
+}

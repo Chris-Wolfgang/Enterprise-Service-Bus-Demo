@@ -1,0 +1,249 @@
+@inject ErpDbContext Db
+@inject ErpConnector Connector
+@implements IDisposable
+
+<div class="erp-container">
+
+    @* LEFT: embedded 80×24 terminal *@
+    <div class="erp-terminal">
+        <div class="erp-trow erp-trow-title">*** PRELUDE/SQL  CUSTOMER MASTER  VER 4.2 ***</div>
+        <div class="erp-trow erp-trow-dim">@_clock</div>
+        <div class="erp-trow">&nbsp;</div>
+
+        @if (_mode == ErpMode.List)
+        {
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow erp-trow-dim">@_divider</div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow erp-trow-center">SELECT A CUSTOMER FROM THE LIST</div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow erp-trow-dim">  Click any row on the right to load customer detail.</div>
+        }
+        else if (_mode == ErpMode.New)
+        {
+            <div class="erp-trow erp-trow-dim">@_divider</div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow erp-trow-center">*** NEW CUSTOMER ***</div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow"><span class="erp-lbl">  CUST# ..... </span><span class="erp-val">@_newCustNum</span></div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow"><span class="erp-lbl">  NAME ...... </span><input class="erp-input" @bind="_editName" @bind:event="oninput" maxlength="30" /></div>
+            <div class="erp-trow"><span class="erp-lbl">  EMAIL ..... </span><input class="erp-input erp-input-wide" @bind="_editEmail" @bind:event="oninput" maxlength="50" /></div>
+            <div class="erp-trow"><span class="erp-lbl">  PHONE ..... </span><input class="erp-input" @bind="_editPhone" @bind:event="oninput" maxlength="20" /></div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow"><span class="erp-lbl">  TYPE ...... </span><input class="erp-input" @bind="_editType" @bind:event="oninput" maxlength="4" /><span class="erp-trow-dim">   (RETL/WHSL/GEN/GOV)</span></div>
+            <div class="erp-trow"><span class="erp-lbl">  TERMS ..... </span><input class="erp-input" @bind="_editTerms" @bind:event="oninput" maxlength="6" /><span class="erp-trow-dim">   (NET30/NET60/COD…)</span></div>
+            <div class="erp-trow"><span class="erp-lbl">  CREDIT LIM  </span><input class="erp-input" @bind="_editCredit" @bind:event="oninput" maxlength="12" /></div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow erp-trow-dim">@_divider</div>
+            <div class="erp-trow">&nbsp;</div>
+            <div class="erp-trow"><span class="erp-key" @onclick="SaveNew">[F2=SAVE]</span><span class="erp-trow-dim">   </span><span class="erp-key erp-key-red" @onclick="CancelNew">[ESC=CANCEL]</span><span class="erp-trow-dim">  → publishes account.create</span></div>
+        }
+        else
+        {
+            var cust = _customers.FirstOrDefault(c => c.CustNum == _activeCustNum);
+            @if (cust != null)
+            {
+                var isActive = cust.IsActive;
+                var closedStr = cust.ClosedDate.HasValue ? cust.ClosedDate.Value.ToString("MM/dd/yy") : "";
+                <div class="erp-trow erp-trow-dim">@_divider</div>
+                <div class="erp-trow">&nbsp;</div>
+                <div class="erp-trow"><span class="erp-lbl">  CUST# ..... </span><span class="erp-val">@cust.CustNum.PadRight(14)</span><span class="erp-lbl">STATUS: </span><span class="@(isActive ? "erp-val-green" : "erp-val-red")">@(isActive ? "ACTIVE" : "INACTIVE")</span></div>
+                <div class="erp-trow"><span class="erp-lbl">  CLOSED DATE  </span><span class="@(isActive ? "erp-trow-dim" : "erp-val-red")">@(isActive ? "(open)" : closedStr)</span></div>
+                <div class="erp-trow">&nbsp;</div>
+                <div class="erp-trow"><span class="erp-lbl">  NAME ...... </span>@if (_mode == ErpMode.Edit){<input class="erp-input" @bind="_editName" @bind:event="oninput" maxlength="30" />}else{<span class="erp-val">@cust.Name</span>}</div>
+                <div class="erp-trow"><span class="erp-lbl">  EMAIL ..... </span>@if (_mode == ErpMode.Edit){<input class="erp-input erp-input-wide" @bind="_editEmail" @bind:event="oninput" maxlength="50" />}else{<span class="erp-val">@(cust.Email ?? "N/A")</span>}</div>
+                <div class="erp-trow"><span class="erp-lbl">  PHONE ..... </span>@if (_mode == ErpMode.Edit){<input class="erp-input" @bind="_editPhone" @bind:event="oninput" maxlength="20" />}else{<span class="erp-val">@(cust.Phone ?? "N/A")</span>}</div>
+                <div class="erp-trow">&nbsp;</div>
+                <div class="erp-trow"><span class="erp-lbl">  TYPE ...... </span><span class="erp-val">@cust.CustType.PadRight(12)</span><span class="erp-lbl">TERMS: </span><span class="erp-val">@(cust.Terms ?? "—")</span></div>
+                <div class="erp-trow"><span class="erp-lbl">  CREDIT LIM  </span><span class="erp-val-yellow">@cust.CreditLim.ToString("N2")</span></div>
+                <div class="erp-trow">&nbsp;</div>
+                <div class="erp-trow erp-trow-dim">@_divider</div>
+                <div class="erp-trow">&nbsp;</div>
+                <div class="erp-trow">@if (_mode == ErpMode.Edit)
+                    {<span class="erp-key" @onclick="SaveEdit">[F2=SAVE]</span><span class="erp-trow-dim">   </span><span class="erp-key erp-key-red" @onclick="CancelEdit">[ESC=CANCEL]</span><span class="erp-trow-dim">  → publishes account.updated</span>}
+                    else
+                    {<span class="erp-key" @onclick="StartEdit">[F1=EDIT]</span><span class="erp-trow-dim">   </span><span class="erp-key erp-key-cyan" @onclick="ToggleStatus">@(isActive ? "[F3=DEACTIVATE]" : "[F3=ACTIVATE]")</span><span class="erp-trow-dim">   </span><span class="erp-key erp-key-dim" @onclick="() => { _activeCustNum = null; _mode = ErpMode.List; }">[ESC=BACK]</span>}
+                </div>
+            }
+        }
+
+        <div class="erp-terminal-spacer"></div>
+
+        <div class="erp-trow erp-trow-statusbar">
+            @($"F1=EDIT  F2=SAVE  F3=DEACT/ACT  F4=NEW  ESC=BACK  │  {_customers.Count} RECORDS")
+        </div>
+    </div>
+
+    @* RIGHT: customer roster *@
+    <div class="erp-roster">
+        <div class="erp-roster-hdr">
+            <span class="erp-roster-col-num">CUST#</span>
+            <span class="erp-roster-col-name">NAME</span>
+        </div>
+        @foreach (var cust in _customers)
+        {
+            <div class="erp-roster-row @(_activeCustNum == cust.CustNum ? "erp-roster-active" : "") @(!cust.IsActive ? "erp-roster-inactive" : "")"
+                 @onclick="() => SelectRow(cust.CustNum)">
+                <span class="erp-roster-col-num">@cust.CustNum</span>
+                <span class="erp-roster-col-name">@cust.Name</span>
+            </div>
+        }
+        <div class="erp-roster-new" @onclick="StartNew">[F4] New Customer</div>
+    </div>
+
+</div>
+
+@code {
+    private enum ErpMode { List, Detail, Edit, New }
+
+    private static readonly string _divider = new('─', 76);
+
+    private List<CustMast> _customers = [];
+    private string? _activeCustNum;
+    private ErpMode _mode = ErpMode.List;
+    private string _editName = "";
+    private string _editEmail = "";
+    private string _editPhone = "";
+    private string _editType = "GEN";
+    private string _editTerms = "";
+    private string _editCredit = "0.00";
+    private string _newCustNum = "";
+    private string _clock = "";
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+        _clock = BuildClock();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            _clock = BuildClock();
+            InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+        Connector.DataChanged += OnDataChanged;
+    }
+
+    public void Dispose()
+    {
+        Connector.DataChanged -= OnDataChanged;
+        _timer?.Dispose();
+    }
+
+    private void OnDataChanged() =>
+        _ = InvokeAsync(async () =>
+        {
+            _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+            StateHasChanged();
+        });
+
+    private static string BuildClock() =>
+        $"  DATE: {DateTime.Now:MM/dd/yy}   TIME: {DateTime.Now:HH:mm:ss}   TERMINAL: ERP-01";
+
+    private void SelectRow(string custNum)
+    {
+        if (_activeCustNum == custNum && _mode == ErpMode.Detail)
+        {
+            _activeCustNum = null;
+            _mode = ErpMode.List;
+        }
+        else
+        {
+            _activeCustNum = custNum;
+            _mode = ErpMode.Detail;
+        }
+    }
+
+    private void StartEdit()
+    {
+        var cust = _customers.FirstOrDefault(c => c.CustNum == _activeCustNum);
+        if (cust is null) return;
+        _editName  = cust.Name;
+        _editEmail = cust.Email ?? "";
+        _editPhone = cust.Phone ?? "";
+        _mode = ErpMode.Edit;
+    }
+
+    private async Task SaveEdit()
+    {
+        var cust = _customers.FirstOrDefault(c => c.CustNum == _activeCustNum);
+        if (cust is null) return;
+        cust.Name    = _editName;
+        cust.Email   = _editEmail;
+        cust.Phone   = _editPhone;
+        cust.ModDate = DateTime.UtcNow;
+        Db.CustMast.Update(cust);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+        _mode = ErpMode.Detail;
+
+        Connector.PublishAccountUpdated(cust);
+    }
+
+    private void CancelEdit() => _mode = ErpMode.Detail;
+
+    private async Task ToggleStatus()
+    {
+        var cust = _customers.FirstOrDefault(c => c.CustNum == _activeCustNum);
+        if (cust is null) return;
+
+        var wasActive = cust.IsActive;
+        cust.ClosedDate = wasActive ? DateTime.UtcNow : null;
+        cust.ModDate    = DateTime.UtcNow;
+        Db.CustMast.Update(cust);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+
+        Connector.PublishStatusChanged(cust, wasActive);
+    }
+
+    private void StartNew()
+    {
+        var nextNum = _customers.Count + 1;
+        _newCustNum  = $"CUST{nextNum:D4}";
+        _editName    = "";
+        _editEmail   = "";
+        _editPhone   = "";
+        _editType    = "GEN";
+        _editTerms   = "NET30";
+        _editCredit  = "0.00";
+        _activeCustNum = null;
+        _mode = ErpMode.New;
+    }
+
+    private async Task SaveNew()
+    {
+        if (string.IsNullOrWhiteSpace(_editName)) return;
+
+        var cust = new CustMast
+        {
+            CustNum    = _newCustNum,
+            Name       = _editName,
+            Email      = _editEmail,
+            Phone      = _editPhone,
+            CustType   = string.IsNullOrWhiteSpace(_editType) ? "GEN" : _editType.ToUpperInvariant(),
+            Terms      = string.IsNullOrWhiteSpace(_editTerms) ? null : _editTerms.ToUpperInvariant(),
+            CreditLim  = decimal.TryParse(_editCredit, out var cr) ? cr : 0m,
+            ClosedDate = null,
+            AddDate    = DateTime.UtcNow,
+            ModDate    = DateTime.UtcNow
+        };
+
+        Db.CustMast.Add(cust);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+        _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+
+        _activeCustNum = cust.CustNum;
+        _mode = ErpMode.Detail;
+
+        Connector.PublishNew(cust);
+    }
+
+    private void CancelNew()
+    {
+        _activeCustNum = null;
+        _mode = ErpMode.List;
+    }
+}
