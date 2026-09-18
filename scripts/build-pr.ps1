@@ -22,7 +22,13 @@
     Skip DevSkim and gitleaks scans.
 
 .PARAMETER CoverageThreshold
-    Minimum coverage percentage required. Defaults to 90.
+    Minimum line coverage for PRODUCTION assemblies (anything under src/).
+    Defaults to 90. Mirrors CODECOV_MINIMUM in pr.yaml.
+
+.PARAMETER TestCoverageThreshold
+    Minimum line coverage for TEST assemblies (anything under tests/).
+    Defaults to 100 — test code that never executes has no purpose. Mirrors
+    CODECOV_TEST_MINIMUM in pr.yaml.
 
 .EXAMPLE
     pwsh ./scripts/build-pr.ps1
@@ -33,7 +39,8 @@ param(
     [switch]$SkipTests,
     [switch]$SkipCoverage,
     [switch]$SkipSecurity,
-    [int]$CoverageThreshold = 90
+    [int]$CoverageThreshold = 90,
+    [int]$TestCoverageThreshold = 100
 )
 
 $ErrorActionPreference = 'Stop'
@@ -81,6 +88,17 @@ else {
 if (-not $SkipTests -and $failed.Count -eq 0) {
     Write-Step "Step 2: Run Tests (all target frameworks)"
 
+    # Mirrors pr.yaml's Stage 2 TFM parity check (guard 3). Findings are
+    # warnings (exit 0); a non-zero exit means the evaluation itself broke and
+    # is a failure here exactly as it is in CI.
+    if (Test-Path './scripts/tfm-parity.ps1') {
+        & pwsh -NoProfile -File './scripts/tfm-parity.ps1'
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "TFM parity guard failed to run (exit $LASTEXITCODE)"
+            $failed += "TFM parity"
+        }
+    }
+
     $testProjects = @(Get-ChildItem -Path './tests' -Recurse -File -Include '*.csproj', '*.vbproj', '*.fsproj' -ErrorAction SilentlyContinue)
 
     if ($testProjects.Count -eq 0) {
@@ -101,17 +119,24 @@ if (-not $SkipTests -and $failed.Count -eq 0) {
             Write-Host ""
             Write-Host "Testing: $($testProj.FullName)" -ForegroundColor White
 
-            $content = Get-Content $testProj.FullName -Raw
-            $tfmMatch = [regex]::Match($content, '<TargetFramework[s]?>([^<]+)</TargetFramework[s]?>')
+            # Evaluate the TFMs through MSBuild exactly as pr.yaml does, so
+            # values inherited from Directory.Build.props or set conditionally
+            # are seen; a regex over the raw csproj misses both.
+            $tfmRaw = (dotnet msbuild $testProj.FullName -noLogo -p:Configuration=Release -getProperty:TargetFrameworks 2>$null |
+                Where-Object { $_ -and "$_".Trim() } | Select-Object -Last 1)
+            if (-not $tfmRaw) {
+                $tfmRaw = (dotnet msbuild $testProj.FullName -noLogo -p:Configuration=Release -getProperty:TargetFramework 2>$null |
+                    Where-Object { $_ -and "$_".Trim() } | Select-Object -Last 1)
+            }
+            $tfmRaw = ("$tfmRaw" -replace '^TargetFrameworks?[=:]\s*', '') -replace '\s', ''
 
-            if (-not $tfmMatch.Success) {
+            if (-not $tfmRaw) {
                 Write-Host "  No target frameworks found — skipping" -ForegroundColor Yellow
                 continue
             }
 
-            $frameworks = $tfmMatch.Groups[1].Value -split ';' |
-                ForEach-Object { $_.Trim() } |
-                Where-Object { $_ -match '^net(5\.0|6\.0|7\.0|8\.0|9\.0|10\.0|462|47|471|472|48|481|coreapp3\.1)$' }
+            $frameworks = @($tfmRaw -split ';' |
+                Where-Object { $_ -match '^net(5\.0|6\.0|7\.0|8\.0|9\.0|10\.0|462|47|471|472|48|481|coreapp3\.1)$' })
 
             if ($frameworks.Count -eq 0) {
                 Write-Host "  No compatible frameworks — skipping" -ForegroundColor Yellow
@@ -140,11 +165,21 @@ if (-not $SkipTests -and $failed.Count -eq 0) {
                     }
                 }
 
-                dotnet test @testArgs
+                # Mirrors pr.yaml's zero-tests-ran guard: `dotnet test` exits 0
+                # when the runner finds NO tests, so check the summary too.
+                $testLog = [System.IO.Path]::GetTempFileName()
+                dotnet test @testArgs 2>&1 | Tee-Object -FilePath $testLog
 
                 if ($LASTEXITCODE -ne 0) {
                     Write-Fail "  Tests failed for $fw"
                     $failed += "Tests ($fw)"
+                    break
+                }
+                $testOutput = Get-Content $testLog -Raw
+                Remove-Item $testLog -Force -ErrorAction SilentlyContinue
+                if ($testOutput -match 'No test is available' -or $testOutput -notmatch '(?i)total:\s*[1-9][0-9]*') {
+                    Write-Fail "  Zero tests ran for $fw — the test adapter found nothing to execute (missing/incompatible xunit.runner.visualstudio for this TFM?)"
+                    $failed += "Tests (${fw}: zero ran)"
                     break
                 }
             }
@@ -162,7 +197,7 @@ if (-not $SkipTests -and $failed.Count -eq 0) {
 # STEP 3: Coverage Report and Threshold
 # ============================================================================
 if (-not $SkipTests -and -not $SkipCoverage -and $failed.Count -eq 0) {
-    Write-Step "Step 3: Coverage Report (threshold: ${CoverageThreshold}%)"
+    Write-Step "Step 3: Coverage Report (src ${CoverageThreshold}%, tests ${TestCoverageThreshold}%)"
 
     $coverageFiles = Get-ChildItem -Path TestResults -Recurse -Filter coverage.cobertura.xml -ErrorAction SilentlyContinue
 
@@ -203,17 +238,36 @@ if (-not $SkipTests -and -not $SkipCoverage -and $failed.Count -eq 0) {
             Get-Content "CoverageReport/Summary.txt"
             Write-Host ""
 
+            # Assembly names produced by projects under tests/ — mirrors pr.yaml.
+            # Identify test assemblies by LOCATION, never by name: shipped product
+            # packages such as Wolfgang.Etl.TestKit contain "Test" and live in src/.
+            $testAssemblies = @()
+            if (Test-Path "tests") {
+                Get-ChildItem -Path "tests" -Recurse -File -Include *.csproj,*.vbproj,*.fsproj | ForEach-Object {
+                    $m = [regex]::Match((Get-Content $_.FullName -Raw), '<AssemblyName>([^<]+)</AssemblyName>')
+                    $testAssemblies += $(if ($m.Success) { $m.Groups[1].Value.Trim() } else { $_.BaseName })
+                }
+            }
+
             $failedProjects = @()
             $matched = 0
             foreach ($line in (Get-Content "CoverageReport/Summary.txt")) {
-                if ($line -match '^\s*(\S+)\s+(\d+(?:\.\d+)?)%\s*$' -and $line -notmatch '^\s*Summary') {
+                # Anchor on `^(\S+)` — NOT `^\s*(\S+)`. The leading `\s*` used to
+                # let ReportGenerator's indented per-class rows match, so individual
+                # classes were gated as if they were projects (the same defect
+                # pr.yaml's Stage 1 had via a bare `read -r`). Only assembly rows
+                # are gated; an assembly only reaches 100% when every class does.
+                if ($line -match '^(\S+)\s+(\d+(?:\.\d+)?)%\s*$' -and $line -notmatch '^Summary') {
                     $module = $Matches[1]
                     $percent = [int][math]::Floor([double]$Matches[2])
                     $matched++
 
-                    if ($percent -lt $CoverageThreshold) {
-                        Write-Fail "  $module — ${percent}% (below ${CoverageThreshold}%)"
-                        $failedProjects += "$module (${percent}%)"
+                    $isTest    = $testAssemblies -contains $module
+                    $applies   = if ($isTest) { $TestCoverageThreshold } else { $CoverageThreshold }
+
+                    if ($percent -lt $applies) {
+                        Write-Fail "  $module — ${percent}% (below ${applies}%)"
+                        $failedProjects += "$module (${percent}%, needs ${applies}%)"
                     }
                     else {
                         Write-Pass "  $module — ${percent}%"
@@ -290,7 +344,8 @@ if (-not $SkipSecurity) {
     $gitleaks = Get-Command gitleaks -ErrorAction SilentlyContinue
     if (-not $gitleaks) {
         Write-Host "gitleaks not found — installing..."
-        $version = "8.24.0"
+        # Keep in step with GITLEAKS_VERSION in .github/workflows/pr.yaml.
+        $version = "8.30.1"
         if ($IsWindows -or $env:OS -match 'Windows') {
             $archive = "gitleaks_${version}_windows_x64.zip"
             $url = "https://github.com/gitleaks/gitleaks/releases/download/v${version}/$archive"
@@ -306,7 +361,21 @@ if (-not $SkipSecurity) {
             $env:PATH = "$dest;$env:PATH"
         }
         else {
-            $archive = "gitleaks_${version}_linux_x64.tar.gz"
+            # gitleaks ships separate darwin / linux builds, and on both we
+            # also have to pick between x64 and arm64 (Apple Silicon on macOS,
+            # ARM64 dev boards / cloud VMs on Linux). Without this branch the
+            # POSIX path would download the wrong-OS tarball or install an
+            # incompatible binary. Comparing to the strongly-typed enum value
+            # (rather than the string "Arm64") avoids implicit-conversion
+            # surprises across PowerShell hosts.
+            $arm64 = [System.Runtime.InteropServices.Architecture]::Arm64
+            $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq $arm64) { 'arm64' } else { 'x64' }
+            if ($IsMacOS) {
+                $archive = "gitleaks_${version}_darwin_${arch}.tar.gz"
+            }
+            else {
+                $archive = "gitleaks_${version}_linux_${arch}.tar.gz"
+            }
             $url = "https://github.com/gitleaks/gitleaks/releases/download/v${version}/$archive"
             # Install to a user-writable location instead of /usr/local/bin
             # (which would require sudo for most local dev shells). $HOME/.local/bin
@@ -324,7 +393,8 @@ if (-not $SkipSecurity) {
         }
     }
 
-    gitleaks detect --source . --verbose --redact
+    # `gitleaks git` (8.19+) replaces the deprecated `detect --source`.
+    gitleaks git --verbose --redact .
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "Gitleaks found secrets"
         $failed += "Gitleaks"
