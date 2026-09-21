@@ -88,6 +88,12 @@ else {
 if (-not $SkipTests -and $failed.Count -eq 0) {
     Write-Step "Step 2: Run Tests (all target frameworks)"
 
+    # Results from an earlier run would be merged into this run's coverage report and could
+    # hide or invent misses; start every run from a clean slate.
+    foreach ($stale in @('TestResults', 'CoverageReport')) {
+        if (Test-Path $stale) { Remove-Item $stale -Recurse -Force }
+    }
+
     # Mirrors pr.yaml's Stage 2 TFM parity check (guard 3). Findings are
     # warnings (exit 0); a non-zero exit means the evaluation itself broke and
     # is a failure here exactly as it is in CI.
@@ -143,6 +149,25 @@ if (-not $SkipTests -and $failed.Count -eq 0) {
                 continue
             }
 
+            # Only projects that really run tests: an AOT smoke executable or a
+            # fixture under tests/ has nothing for the test adapter to execute and
+            # would trip the zero-tests guard below. IsTestProject comes from
+            # Microsoft.NET.Test.Sdk's props, imported per TFM after restore, so
+            # check it per framework and fall back to the PackageReference itself
+            # (mirrors scripts/tfm-parity.ps1).
+            $isTestProject = $false
+            foreach ($fw in $frameworks) {
+                $isTest = (dotnet msbuild $testProj.FullName -noLogo -p:Configuration=Release "-p:TargetFramework=$fw" -getProperty:IsTestProject 2>$null |
+                    Where-Object { $_ -and "$_".Trim() } | Select-Object -Last 1)
+                if (("$isTest" -replace '^IsTestProject[=:]\s*', '').Trim() -ieq 'true') { $isTestProject = $true; break }
+                $refs = (dotnet msbuild $testProj.FullName -noLogo -p:Configuration=Release "-p:TargetFramework=$fw" -getItem:PackageReference 2>$null | Out-String)
+                if ($refs.Trim() -and ((ConvertFrom-Json $refs).Items.PackageReference | Where-Object { $_.Identity -ieq 'Microsoft.NET.Test.Sdk' })) { $isTestProject = $true; break }
+            }
+            if (-not $isTestProject) {
+                Write-Host "  Not a test project (no IsTestProject / Microsoft.NET.Test.Sdk) — skipping dotnet test" -ForegroundColor Yellow
+                continue
+            }
+
             Write-Host "  Frameworks: $($frameworks -join ', ')"
 
             foreach ($fw in $frameworks) {
@@ -177,7 +202,8 @@ if (-not $SkipTests -and $failed.Count -eq 0) {
                 }
                 $testOutput = Get-Content $testLog -Raw
                 Remove-Item $testLog -Force -ErrorAction SilentlyContinue
-                if ($testOutput -match 'No test is available' -or $testOutput -notmatch '(?i)total:\s*[1-9][0-9]*') {
+                # verbosity=normal prints "Total tests: N"; minimal (pr.yaml) prints "Total: N" — accept both.
+                if ($testOutput -match 'No test is available' -or $testOutput -notmatch '(?i)total(?: tests)?:\s*[1-9][0-9]*') {
                     Write-Fail "  Zero tests ran for $fw — the test adapter found nothing to execute (missing/incompatible xunit.runner.visualstudio for this TFM?)"
                     $failed += "Tests (${fw}: zero ran)"
                     break

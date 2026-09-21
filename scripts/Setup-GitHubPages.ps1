@@ -15,7 +15,7 @@
     5. Creates a gh-pages branch if it doesn't already exist
     6. Configures GitHub Pages settings to serve from the gh-pages branch
     7. Verifies the DocFX workflow is reachable via workflow_call from release.yaml
-    
+
     Run this script locally after creating a new repository from the template.
 
 .PARAMETER Repository
@@ -40,7 +40,7 @@
     Sets up GitHub Pages and automatically enables it without any prompts
 
 .NOTES
-    Requires: 
+    Requires:
     - GitHub CLI (gh) authenticated with sufficient permissions
     - Git installed and available in PATH
     Install gh: https://cli.github.com/
@@ -49,11 +49,11 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$Repository = "{{GITHUB_USERNAME}}/{{REPO_NAME}}",
-    
+    [string]$Repository = "{{GITHUB_OWNER}}/{{REPO_NAME}}",
+
     [Parameter()]
     [switch]$EnablePages,
-    
+
     [Parameter()]
     [switch]$SkipPrompt
 )
@@ -93,14 +93,14 @@ function Read-Input {
     param(
         [Parameter(Mandatory)]
         [string]$Prompt,
-        
+
         [string]$Default = '',
-        
+
         [string]$Example = '',
-        
+
         [switch]$Required
     )
-    
+
     $displayPrompt = $Prompt
     if ($Default) {
         $displayPrompt += " [$Default]"
@@ -109,11 +109,11 @@ function Read-Input {
         $displayPrompt += " (e.g., $Example)"
     }
     $displayPrompt += ": "
-    
+
     do {
         Write-Host $displayPrompt -NoNewline -ForegroundColor Yellow
         $input = Read-Host
-        
+
         if ([string]::IsNullOrWhiteSpace($input)) {
             if ($Default) {
                 return $Default
@@ -124,7 +124,7 @@ function Read-Input {
             }
             return ''
         }
-        
+
         return $input.Trim()
     } while ($true)
 }
@@ -150,13 +150,13 @@ if (-not $SkipPrompt) {
     Write-Host "  • Enable GitHub Pages in repository settings" -ForegroundColor Gray
     Write-Host "  • Verify the DocFX workflow configuration" -ForegroundColor Gray
     Write-Host ""
-    
+
     $response = Read-Host "Do you want to set up GitHub Pages for documentation? (y/N)"
     if ($response -ne 'y' -and $response -ne 'Y') {
         Write-Info "Setup cancelled. You can run this script again anytime."
         exit 0
     }
-    
+
     Write-Host ""
 }
 
@@ -211,7 +211,7 @@ try {
 }
 
 # Determine repository
-if ($Repository -eq "{{GITHUB_USERNAME}}/{{REPO_NAME}}" -or -not $Repository) {
+if ($Repository -eq "{{GITHUB_OWNER}}/{{REPO_NAME}}" -or -not $Repository) {
     # Placeholders not replaced or no repository specified - auto-detect
     Write-Info "Detecting current repository..."
     try {
@@ -219,8 +219,8 @@ if ($Repository -eq "{{GITHUB_USERNAME}}/{{REPO_NAME}}" -or -not $Repository) {
         $Repository = $repoInfo.nameWithOwner
         Write-Success "Using repository: $Repository"
     } catch {
-        if ($Repository -eq "{{GITHUB_USERNAME}}/{{REPO_NAME}}") {
-            Write-Error-Custom "Could not detect repository. Please run the setup script (scripts/setup.ps1 or scripts/setup.sh) first to replace placeholders, or specify -Repository parameter."
+        if ($Repository -eq "{{GITHUB_OWNER}}/{{REPO_NAME}}") {
+            Write-Error-Custom "Could not detect repository. Please run the setup script (pwsh ./scripts/setup.ps1) first to replace placeholders, or specify -Repository parameter."
         } else {
             Write-Error-Custom "Could not detect repository. Please run from within a git repository or specify -Repository parameter."
         }
@@ -256,12 +256,12 @@ if ($needsDocFxConfig) {
     Write-Host ""
     Write-Host "📝 Gathering project information for DocFX configuration..." -ForegroundColor Cyan
     Write-Host ""
-    
+
     # Parse repository information
     $repoOwner = $Repository -split '/' | Select-Object -First 1
     $repoName = $Repository -split '/' | Select-Object -Last 1
     $githubRepoUrl = "https://github.com/$Repository"
-    
+
     # Try to get repository description from GitHub
     try {
         $repoFullInfo = gh repo view --json description,nameWithOwner | ConvertFrom-Json
@@ -272,37 +272,37 @@ if ($needsDocFxConfig) {
     } catch {
         $autoDescription = "A .NET library/application"
     }
-    
+
     # Calculate default documentation URL
     $defaultDocsUrl = "https://$repoOwner.github.io/$repoName/"
-    
+
     # Prompt for project information
     $projectName = Read-Input `
         -Prompt "Project Name" `
         -Default $repoName `
         -Example $repoName `
         -Required
-    
+
     $projectDescription = Read-Input `
         -Prompt "Project Description" `
         -Default $autoDescription `
         -Example $autoDescription
-    
+
     $packageName = Read-Input `
         -Prompt "NuGet Package Name (if publishing to NuGet)" `
         -Default $projectName `
         -Example $projectName
-    
+
     $docsUrl = Read-Input `
         -Prompt "Documentation URL (GitHub Pages)" `
         -Default $defaultDocsUrl `
         -Example $defaultDocsUrl
-    
+
     # Ensure docsUrl ends with /
     if (-not $docsUrl.EndsWith('/')) {
         $docsUrl += '/'
     }
-    
+
     # Summary
     Write-Host ""
     Write-Host "Configuration Summary:" -ForegroundColor Cyan
@@ -312,13 +312,13 @@ if ($needsDocFxConfig) {
     Write-Host "  Repository URL:      $githubRepoUrl" -ForegroundColor Gray
     Write-Host "  Documentation URL:   $docsUrl" -ForegroundColor Gray
     Write-Host ""
-    
+
     $confirm = Read-Host "Proceed with this configuration? (Y/n)"
     if ($confirm -and $confirm -ne 'Y' -and $confirm -ne 'y') {
         Write-Warning-Custom "Configuration cancelled."
         exit 0
     }
-    
+
     # Create replacements hashtable
     $replacements = @{
         '{{PROJECT_NAME}}' = $projectName
@@ -327,7 +327,7 @@ if ($needsDocFxConfig) {
         '{{GITHUB_REPO_URL}}' = $githubRepoUrl
         '{{DOCS_URL}}' = $docsUrl
     }
-    
+
     # Files to update
     $filesToUpdate = @(
         'docfx_project/docfx.json',
@@ -338,18 +338,18 @@ if ($needsDocFxConfig) {
         'docfx_project/docs/introduction.md',
         'docfx_project/docs/getting-started.md'
     )
-    
+
     # Replace placeholders in files
     Write-Host ""
     Write-Info "Replacing placeholders in DocFX files..."
     $filesUpdated = 0
-    
+
     foreach ($file in $filesToUpdate) {
         if (Test-Path $file) {
             $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
             if ($content) {
                 $originalContent = $content
-                
+
                 foreach ($placeholder in $replacements.Keys) {
                     $pattern = [regex]::Escape($placeholder)
                     $content = [regex]::Replace(
@@ -358,7 +358,7 @@ if ($needsDocFxConfig) {
                         [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $replacements[$placeholder] }
                     )
                 }
-                
+
                 if ($content -ne $originalContent) {
                     Set-Content -Path $file -Value $content -NoNewline -Encoding UTF8
                     Write-Success "  Updated: $file"
@@ -367,13 +367,13 @@ if ($needsDocFxConfig) {
             }
         }
     }
-    
+
     if ($filesUpdated -gt 0) {
         Write-Success "Successfully updated $filesUpdated DocFX file(s)"
     } else {
         Write-Info "No files needed updating"
     }
-    
+
     Write-Host ""
 }
 
@@ -381,19 +381,19 @@ if ($needsDocFxConfig) {
 Write-Step "Checking for gh-pages branch..."
 try {
     $branches = git ls-remote --heads origin gh-pages 2>&1
-    
+
     if ($LASTEXITCODE -ne 0) {
         Write-Error-Custom "Error checking for gh-pages branch. Git exited with code $LASTEXITCODE.`nOutput:`n$branches"
         exit 1
     }
-    
+
     $ghPagesBranchExists = -not [string]::IsNullOrWhiteSpace($branches)
-    
+
     if ($ghPagesBranchExists) {
         Write-Success "gh-pages branch already exists"
     } else {
         Write-Info "gh-pages branch does not exist yet"
-        
+
         # Check for uncommitted changes before creating gh-pages branch
         $gitStatus = git status --porcelain 2>&1
         if (-not [string]::IsNullOrWhiteSpace($gitStatus)) {
@@ -406,32 +406,32 @@ try {
                 exit 0
             }
         }
-        
+
         # Store the current branch name before switching
         $originalBranch = git rev-parse --abbrev-ref HEAD 2>&1
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($originalBranch) -or 
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($originalBranch) -or
             $originalBranch -match '(fatal|error|warning|usage:)') {
             Write-Warning-Custom "Could not determine current branch name. Will attempt to return to 'main' after creating gh-pages."
             $originalBranch = "main"  # Default fallback
         }
-        
+
         # Create gh-pages branch
         Write-Step "Creating gh-pages branch..."
-        
+
         # Create an orphan branch (no history)
         $checkoutOutput = git checkout --orphan gh-pages 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Error-Custom "Failed to create orphan gh-pages branch. Git output:`n$checkoutOutput"
             throw "Git checkout --orphan failed"
         }
-        
+
         # Remove all files from staging
         $rmOutput = git rm -rf . 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Error-Custom "Failed to remove files from staging. Git output:`n$rmOutput"
             throw "Git rm failed"
         }
-        
+
         # Create a placeholder index.html
         $placeholderHtml = @"
 <!DOCTYPE html>
@@ -448,26 +448,26 @@ try {
 </html>
 "@
         Set-Content -Path "index.html" -Value $placeholderHtml -Encoding UTF8
-        
+
         # Commit and push
         $addOutput = git add index.html 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Error-Custom "Failed to stage index.html. Git output:`n$addOutput"
             throw "Git add failed"
         }
-        
+
         $commitOutput = git commit -m "Initialize gh-pages branch" 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Error-Custom "Failed to commit gh-pages branch. Git output:`n$commitOutput"
             throw "Git commit failed"
         }
-        
+
         $pushOutput = git push origin gh-pages 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Error-Custom "Failed to push gh-pages branch. Git output:`n$pushOutput"
             throw "Git push failed"
         }
-        
+
         # Switch back to original branch
         try {
             $checkoutBackOutput = git checkout $originalBranch 2>&1
@@ -475,7 +475,7 @@ try {
                 Write-Warning-Custom "Failed to switch back to original branch '$originalBranch'. Git output:`n$checkoutBackOutput"
                 # Try to detect the default branch as fallback
                 $defaultBranchOutput = git symbolic-ref refs/remotes/origin/HEAD 2>&1
-                if ($LASTEXITCODE -eq 0 -and $defaultBranchOutput -and 
+                if ($LASTEXITCODE -eq 0 -and $defaultBranchOutput -and
                     $defaultBranchOutput -notmatch '(fatal|error|warning|usage:)') {
                     $defaultBranch = $defaultBranchOutput | ForEach-Object { $_ -replace '^refs/remotes/origin/', '' }
                     $checkoutDefaultOutput = git checkout $defaultBranch 2>&1
@@ -496,7 +496,7 @@ try {
         } catch {
             Write-Warning-Custom "Could not switch back to original branch. You may need to manually switch branches."
         }
-        
+
         Write-Success "Created and pushed gh-pages branch"
     }
 } catch {
@@ -509,7 +509,7 @@ Write-Step "Configuring GitHub Pages settings..."
 try {
     # Get current Pages configuration
     $pagesInfo = gh api "/repos/$Repository/pages" 2>&1
-    
+
     if ($LASTEXITCODE -eq 0) {
         $pagesConfig = $pagesInfo | ConvertFrom-Json
         Write-Success "GitHub Pages is already enabled"
@@ -517,7 +517,7 @@ try {
         if ($pagesConfig.html_url) {
             Write-Info "   URL: $($pagesConfig.html_url)"
         }
-        
+
         # Check if it's configured to use gh-pages branch
         if ($pagesConfig.source.branch -ne "gh-pages") {
             Write-Warning-Custom "GitHub Pages is not configured to use the gh-pages branch"
@@ -529,7 +529,7 @@ try {
                     $EnablePages = $true
                 }
             }
-            
+
             if ($EnablePages) {
                 # Update Pages to use gh-pages branch
                 $pagesConfigUpdate = @{
@@ -538,10 +538,10 @@ try {
                         path = "/"
                     }
                 } | ConvertTo-Json
-                
+
                 $tempFile = [System.IO.Path]::GetTempFileName()
                 $pagesConfigUpdate | Out-File -FilePath $tempFile -Encoding utf8NoBOM
-                
+
                 try {
                     $updateOutput = gh api --method PUT "/repos/$Repository/pages" --input $tempFile 2>&1
                     if ($LASTEXITCODE -ne 0) {
@@ -561,7 +561,7 @@ try {
     } else {
         # Pages not enabled, try to enable it
         Write-Info "GitHub Pages is not enabled yet"
-        
+
         if (-not $EnablePages) {
             $response = Read-Host "Would you like to enable GitHub Pages now? (y/N)"
             if ($response -ne 'y' -and $response -ne 'Y') {
@@ -571,7 +571,7 @@ try {
                 $EnablePages = $true
             }
         }
-        
+
         if ($EnablePages) {
             # Enable Pages with gh-pages branch
             $pagesConfig = @{
@@ -580,10 +580,10 @@ try {
                     path = "/"
                 }
             } | ConvertTo-Json
-            
+
             $tempFile = [System.IO.Path]::GetTempFileName()
             $pagesConfig | Out-File -FilePath $tempFile -Encoding utf8NoBOM
-            
+
             try {
                 $enableOutput = gh api --method POST "/repos/$Repository/pages" --input $tempFile 2>&1
                 if ($LASTEXITCODE -ne 0) {
@@ -591,7 +591,7 @@ try {
                     Write-Host "You may need to enable it manually in: Settings → Pages" -ForegroundColor Yellow
                 } else {
                     Write-Success "Enabled GitHub Pages with gh-pages branch"
-                    
+
                     # Get the Pages URL
                     Start-Sleep -Seconds 2
                     $pagesUrlInfo = gh api "/repos/$Repository/pages" 2>&1
@@ -624,10 +624,10 @@ $workflowPath = ".github/workflows/docfx.yaml"
 if (Test-Path $workflowPath) {
     $workflowContent = Get-Content $workflowPath -Raw
     $normalizedWorkflowContent = $workflowContent -replace "`r`n", "`n"
-    
+
     # Check if workflow is triggered via workflow_call (called by release.yaml)
     $hasWorkflowCall = $normalizedWorkflowContent -match 'workflow_call:'
-    
+
     if ($hasWorkflowCall) {
         Write-Success "DocFX workflow is configured to be called via workflow_call from release.yaml"
     } else {
