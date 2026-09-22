@@ -16,7 +16,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Minimum line coverage for PRODUCTION assemblies (anything under src/).
   CODECOV_MINIMUM: 90
+  # Minimum line coverage for TEST assemblies (anything under tests/).
+  # Kept in sync with pr.yaml — see the note there.
+  CODECOV_TEST_MINIMUM: 100
 
 jobs:
   # Streamlined validation: All frameworks, Windows only
@@ -26,7 +30,7 @@ jobs:
     if: github.repository != 'Chris-Wolfgang/repo-template'
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -85,7 +89,7 @@ jobs:
           }
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           dotnet-version: |
             3.1.x
@@ -106,17 +110,17 @@ jobs:
         shell: pwsh
         run: |
           $testProjects = Get-ChildItem -Path './tests' -Recurse -Filter '*Test*.csproj'
-          
+
           if ($testProjects.Count -eq 0) {
             Write-Error "❌ No test projects found - release requires tests to validate quality"
             exit 1
           }
-          
+
           foreach ($testProj in $testProjects) {
             Write-Host "==========================================" -ForegroundColor Cyan
             Write-Host "Testing project: $($testProj.Name)" -ForegroundColor Cyan
             Write-Host "==========================================" -ForegroundColor Cyan
-            
+
             # Parse the project file to extract target frameworks
             try {
               [xml]$projectXml = Get-Content $testProj.FullName
@@ -124,7 +128,7 @@ jobs:
               Write-Error "❌ Failed to parse project file $($testProj.Name): $_"
               exit 1
             }
-            
+
             # Search all PropertyGroup elements for TargetFramework(s)
             $targetFramework = $null
             $targetFrameworks = $null
@@ -137,7 +141,7 @@ jobs:
                 break
               }
             }
-            
+
             # Determine which frameworks this project targets
             $frameworks = @()
             if ($targetFrameworks) {
@@ -158,7 +162,7 @@ jobs:
               # If no TargetFramework/TargetFrameworks are defined directly in the project file,
               # attempt to resolve them via MSBuild (to account for Directory.Build.props, imports, etc.).
               Write-Host "No TargetFramework or TargetFrameworks found directly in $($testProj.Name); querying MSBuild..." -ForegroundColor Yellow
-              
+
               $msbuildOutput = @()
               $msbuildExitCode = 0
               foreach ($prop in @("TargetFrameworks", "TargetFramework")) {
@@ -170,7 +174,7 @@ jobs:
                   $msbuildOutput += $result
                 }
               }
-              
+
               if ($msbuildExitCode -ne 0) {
                 # MSBuild query failed, fall back to running tests without explicit --framework
                 Write-Warning "MSBuild query failed for $($testProj.Name). Tests will run without explicit --framework."
@@ -182,7 +186,7 @@ jobs:
                   if ([string]::IsNullOrWhiteSpace($line)) {
                     continue
                   }
-                  
+
                   # Expect lines like "TargetFrameworks=net7.0;net8.0" or "TargetFramework=net8.0"
                   # Support both '=' and ':' separators for different MSBuild output formats
                   if ($line -match '^\s*TargetFrameworks\s*[:=]\s*(.+)$') {
@@ -194,13 +198,13 @@ jobs:
                     if ($propertyValue) {
                       $resolvedFrameworks = @($propertyValue)
                     }
-                    
+
                     if ($resolvedFrameworks.Count -gt 0) {
                       break
                     }
                   }
                 }
-                
+
                 if ($resolvedFrameworks.Count -gt 0) {
                   $frameworks = $resolvedFrameworks
                 } else {
@@ -209,13 +213,13 @@ jobs:
                 }
               }
             }
-            
+
             Write-Host "Detected frameworks: $($frameworks -join ', ')" -ForegroundColor Cyan
-            
+
             foreach ($fw in $frameworks) {
               if ([string]::IsNullOrWhiteSpace($fw)) {
                 Write-Host "Testing project $($testProj.Name) without explicit --framework (using SDK/MSBuild defaults)" -ForegroundColor Yellow
-                
+
                 # When framework cannot be determined, run tests once without specifying --framework.
                 # Collect coverage in this case to avoid missing data due to unknown TFM.
                 dotnet test $testProj.FullName `
@@ -225,17 +229,17 @@ jobs:
                   --collect:"XPlat Code Coverage" `
                   --results-directory "./TestResults" `
                   --logger "console;verbosity=minimal"
-                
+
                 if ($LASTEXITCODE -ne 0) {
                   Write-Error "❌ Tests failed (no explicit TargetFramework) in $($testProj.Name)"
                   exit $LASTEXITCODE
                 }
-                
+
                 continue
               }
-              
+
               Write-Host "Testing framework: $fw" -ForegroundColor Yellow
-              
+
               # Collect coverage only for .NET 5.0+ TFMs; still run tests for all frameworks
               if ($fw -match '^net([5-9]|[1-9][0-9]+)\.') {
                 dotnet test $testProj.FullName `
@@ -256,7 +260,7 @@ jobs:
                   --results-directory "./TestResults" `
                   --logger "console;verbosity=minimal"
               }
-              
+
               if ($LASTEXITCODE -ne 0) {
                 if ($fw) {
                   Write-Error "❌ Tests failed for $fw in $($testProj.Name)"
@@ -275,55 +279,75 @@ jobs:
         run: |
           # Check if coverage files exist
           $coverageFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "coverage.cobertura.xml" -ErrorAction SilentlyContinue
-          
+
           if ($coverageFiles.Count -eq 0) {
             Write-Error "❌ No coverage files found - coverage data is required to enforce the 90% threshold"
             exit 1
           }
-          
-          dotnet tool install -g dotnet-reportgenerator-globaltool
-          
-          reportgenerator `
+
+          # Pinned in .config/dotnet-tools.json at the tag; never installed unversioned.
+          dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { Write-Error "dotnet tool restore failed"; exit 1 }
+
+          dotnet reportgenerator `
             -reports:"TestResults/**/coverage.cobertura.xml" `
             -targetdir:"CoverageReport" `
             -reporttypes:"TextSummary;Html"
-          
+
           Write-Host "==========================================" -ForegroundColor Cyan
           Write-Host "Coverage Summary:" -ForegroundColor Cyan
           Write-Host "==========================================" -ForegroundColor Cyan
           Get-Content CoverageReport/Summary.txt
           Write-Host ""
-          
+
           # Parse coverage and enforce threshold per module (matching pr.yaml)
           $summaryContent = Get-Content CoverageReport/Summary.txt
-          $threshold = if ($env:CODECOV_MINIMUM) { [int]$env:CODECOV_MINIMUM } else { 90 }
+          $threshold     = if ($env:CODECOV_MINIMUM) { [int]$env:CODECOV_MINIMUM } else { 90 }
+          $testThreshold = if ($env:CODECOV_TEST_MINIMUM) { [int]$env:CODECOV_TEST_MINIMUM } else { 100 }
           $failedModules = @()
           $coverageFound = $false
-          
+
+          # Assembly names produced by projects under tests/ — mirrors pr.yaml.
+          # Identify test assemblies by LOCATION, never by name: shipped product
+          # packages such as Wolfgang.Etl.TestKit contain "Test" and live in src/.
+          $testAssemblies = @()
+          if (Test-Path "tests") {
+            Get-ChildItem -Path "tests" -Recurse -File -Include *.csproj,*.vbproj,*.fsproj | ForEach-Object {
+              $m = [regex]::Match((Get-Content $_.FullName -Raw), '<AssemblyName>([^<]+)</AssemblyName>')
+              $testAssemblies += $(if ($m.Success) { $m.Groups[1].Value.Trim() } else { $_.BaseName })
+            }
+          }
+
           foreach ($line in $summaryContent) {
-            # Match lines with module names and percentages (skip Summary line)
+            # Match lines with module names and percentages (skip Summary line).
+            # `^([^ ]+)` keeps indented per-class rows out — only assembly rows
+            # are gated, and an assembly only reaches 100% when every class does.
             if ($line -match '^([^ ]+)\s+.*\s+(\d+(?:\.\d+)?)%$' -and $line -notmatch '^Summary') {
               $coverageFound = $true
               $module = $matches[1]
               $coverage = [decimal]$matches[2]
-              
-              Write-Host "Checking module: '$module' - Coverage: ${coverage}%" -ForegroundColor Cyan
-              
-              if ($coverage -lt $threshold) {
-                Write-Host "  ❌ FAIL: Below ${threshold}% threshold" -ForegroundColor Red
-                $failedModules += "$module (${coverage}%)"
+
+              $isTest  = $testAssemblies -contains $module
+              $applies = if ($isTest) { $testThreshold } else { $threshold }
+              $kind    = if ($isTest) { "test" } else { "src" }
+
+              Write-Host "Checking $kind module: '$module' - Coverage: ${coverage}%" -ForegroundColor Cyan
+
+              if ($coverage -lt $applies) {
+                Write-Host "  ❌ FAIL: Below ${applies}% threshold" -ForegroundColor Red
+                $failedModules += "$module (${coverage}%, needs ${applies}%)"
               } else {
-                Write-Host "  ✅ PASS: Meets ${threshold}% threshold" -ForegroundColor Green
+                Write-Host "  ✅ PASS: Meets ${applies}% threshold" -ForegroundColor Green
               }
             }
           }
-          
+
           # Ensure we found and parsed coverage data
           if (-not $coverageFound) {
             Write-Error "❌ Failed to parse coverage data from Summary.txt - cannot enforce threshold"
             exit 1
           }
-          
+
           if ($failedModules.Count -gt 0) {
             Write-Host ""
             Write-Host "==========================================" -ForegroundColor Red
@@ -332,7 +356,7 @@ jobs:
             Write-Host "Modules below ${threshold}% coverage: $($failedModules -join ', ')" -ForegroundColor Red
             exit 1
           }
-          
+
           Write-Host ""
           Write-Host "==========================================" -ForegroundColor Green
           Write-Host "✅ All modules meet ${threshold}% coverage threshold" -ForegroundColor Green
@@ -340,7 +364,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: release-coverage
           path: CoverageReport/
@@ -354,12 +378,12 @@ jobs:
       has-packages: ${{ steps.check-packages.outputs.has-packages }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           dotnet-version: |
             3.1.x
@@ -375,6 +399,13 @@ jobs:
           dotnet restore
           dotnet build --no-restore --configuration Release
 
+      # Renders each src project's transitive NuGet closure to obj/THIRD-PARTY-NOTICES.md;
+      # Directory.Build.props packs it at the package root. Runs from the tag, after
+      # restore (nuget-license reads project.assets.json) and before pack.
+      - name: Generate third-party notices
+        shell: pwsh
+        run: pwsh ./scripts/third-party-notices.ps1
+
       - name: Pack NuGet packages
         id: check-packages
         shell: pwsh
@@ -385,7 +416,7 @@ jobs:
 
           # Find all .csproj files in the src directory recursively
           $projects = Get-ChildItem -Path 'src' -Recurse -Filter '*.csproj'
-          
+
           # Handle case when no projects are found (e.g., template repository)
           if ($projects.Count -eq 0) {
             Write-Warning "No projects found in src/ directory - skipping package creation"
@@ -396,28 +427,28 @@ jobs:
             "has-packages=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             exit 0
           }
-          
+
           # Iterate through each project and create NuGet package
           foreach ($proj in $projects) {
             Write-Host "📦 Packing $($proj.Name)" -ForegroundColor Cyan
             dotnet pack $proj.FullName --no-build --configuration Release --output $packagesPath
-            
+
             # Check if pack operation failed and exit with error
             if ($LASTEXITCODE -ne 0) {
               Write-Error "❌ Pack failed for $($proj.Name)"
               exit $LASTEXITCODE
             }
           }
-          
+
           # Check whether any .nupkg files were actually created
           $packages = Get-ChildItem -Path $packagesPath -Filter '*.nupkg' -ErrorAction SilentlyContinue
-          
+
           if ($packages.Count -eq 0) {
             Write-Warning "No .nupkg files were produced during packing - downstream publish and release jobs will be skipped"
             "has-packages=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             exit 0
           }
-          
+
           # At least one package was created successfully
           Write-Host "✅ NuGet packages created successfully" -ForegroundColor Green
           "has-packages=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -426,12 +457,12 @@ jobs:
         shell: pwsh
         run: |
           $packages = Get-ChildItem -Path 'nuget-packages' -Filter '*.nupkg' -ErrorAction SilentlyContinue
-          
+
           if ($packages.Count -eq 0) {
             Write-Warning "No .nupkg files found - skipping smoke test"
             exit 0
           }
-          
+
           # Helper to read package ID and version from the .nuspec inside a .nupkg
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           function Get-PackageMetadata {
@@ -471,7 +502,7 @@ jobs:
               $zip.Dispose()
             }
           }
-          
+
           # Create temporary test project
           $testDir = Join-Path $PWD 'package-smoke-test'
           New-Item -ItemType Directory -Force -Path $testDir | Out-Null
@@ -494,40 +525,40 @@ jobs:
             '</configuration>'
           )
           $nugetConfigContent | Set-Content -Path $nugetConfigPath -Encoding UTF8
-          
+
           Push-Location $testDir
           try {
             dotnet new console -n SmokeTest -f net8.0
-            
+
             # Try to install the newly created package(s)
             foreach ($package in $packages) {
               Write-Host "🧪 Smoke testing package: $($package.Name)" -ForegroundColor Yellow
-              
+
               $metadata = Get-PackageMetadata -NupkgPath $package.FullName
               $packageId = $metadata.Id
               $packageVersion = $metadata.Version
-              
+
               dotnet add SmokeTest/SmokeTest.csproj package $packageId --version $packageVersion --source '../nuget-packages'
-              
+
               if ($LASTEXITCODE -ne 0) {
                 Write-Error "❌ Failed to install package $($package.Name)"
                 exit $LASTEXITCODE
               }
-              
+
               Write-Host "✅ Package $($package.Name) installed successfully" -ForegroundColor Green
             }
-            
+
             # Try to build the test project with the package
             Write-Host "Building smoke test project..." -ForegroundColor Yellow
             dotnet build SmokeTest/SmokeTest.csproj
-            
+
             if ($LASTEXITCODE -ne 0) {
               Write-Error "❌ Smoke test project failed to build with installed packages"
               exit $LASTEXITCODE
             }
-            
+
             Write-Host "✅ Smoke test passed - packages are installable and buildable" -ForegroundColor Green
-            
+
           } finally {
             Pop-Location
           }
@@ -536,7 +567,9 @@ jobs:
         if: steps.check-packages.outputs.has-packages == 'true'
         shell: pwsh
         run: |
-          dotnet tool install --global CycloneDX
+          # Pinned in .config/dotnet-tools.json at the tag; never installed unversioned.
+          dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { Write-Error "dotnet tool restore failed"; exit 1 }
 
           $sbomDir = Join-Path $PWD 'nuget-packages'
           $srcProjects = Get-ChildItem -Path 'src' -Filter '*.csproj' -Recurse -ErrorAction SilentlyContinue
@@ -562,7 +595,7 @@ jobs:
 
 
       - name: Upload NuGet packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: nuget-packages
           path: ./nuget-packages/
@@ -577,11 +610,13 @@ jobs:
     runs-on: windows-latest
     # Gate on the prior validation jobs so we don't burn ~5-10 min of Windows
     # runner time on a release that's already failing earlier in the pipeline.
+    # No repo guard here: validate-release carries it, and a `needs:` on a
+    # skipped job skips this one too. A guard of its own would make this job
+    # skip in a way publish-nuget's `needs:` treats as unmet (#420).
     needs: [validate-release, pack-and-validate]
-    if: github.repository != 'Chris-Wolfgang/repo-template'
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -598,7 +633,7 @@ jobs:
 
       - name: Setup .NET
         if: steps.check.outputs.found == 'true'
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           # Install the same SDK set as validate-release so dotnet build can
           # compile every TFM the solution targets (some test projects span
@@ -637,19 +672,20 @@ jobs:
         if: steps.check.outputs.found == 'true'
         run: dotnet build --no-restore --configuration Release
 
-      - name: Install DocFX
+      - name: Restore CI tools (DocFX)
         if: steps.check.outputs.found == 'true'
         shell: pwsh
-        run: dotnet tool update docfx --global || dotnet tool install docfx --global
+        # Pinned in .config/dotnet-tools.json at the tag; never installed unversioned.
+        run: dotnet tool restore
 
       - name: Build DocFX metadata
         if: steps.check.outputs.found == 'true'
-        run: docfx metadata
+        run: dotnet docfx metadata
         working-directory: docfx_project
 
       - name: Build documentation (no deploy)
         if: steps.check.outputs.found == 'true'
-        run: docfx build
+        run: dotnet docfx build
         working-directory: docfx_project
 
       - name: Verify documentation output
@@ -672,9 +708,13 @@ jobs:
     needs: [pack-and-validate, verify-docs-build]
     if: needs.pack-and-validate.outputs.has-packages == 'true'
     runs-on: windows-latest
+    permissions:
+      id-token: write       # OIDC token for NuGet trusted publishing (no stored API key) AND for signing the provenance attestation
+      attestations: write   # record the SLSA build-provenance attestation on GitHub
+      contents: read
     steps:
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           dotnet-version: |
             3.1.x
@@ -686,52 +726,60 @@ jobs:
             10.0.x
 
       - name: Download packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           name: nuget-packages
           path: ./packages
 
-      - name: Validate NuGet API key
-        shell: pwsh
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          if ([string]::IsNullOrEmpty($env:NUGET_API_KEY)) {
-            Write-Error "❌ NUGET_API_KEY secret not configured!"
-            Write-Host "Please add it in: Repository Settings → Secrets and variables → Actions → New repository secret"
-            exit 1
-          }
-          Write-Host "✅ NUGET_API_KEY is configured" -ForegroundColor Green
+      # SLSA build provenance: a signed attestation binding each packed .nupkg (by
+      # SHA-256 digest) to the exact repository, commit and workflow run that
+      # produced it, using the job's OIDC identity - no signing key to manage,
+      # the same keyless model as the NuGet trusted-publishing login below.
+      # Attest BEFORE pushing so the provenance covers the exact bytes published;
+      # consumers verify with `gh attestation verify <pkg>.nupkg --repo <owner>/<repo>
+      # --signer-workflow <owner>/<repo>/.github/workflows/release.yaml`.
+      # Package *signing* (an author signature `nuget verify` checks) is separate
+      # and needs a code-signing certificate.
+      - name: Attest build provenance for packages
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: './packages/*.nupkg'
+
+      - name: NuGet login (OIDC trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841  # v1.2.0
+        with:
+          user: Chris-Wolfgang
 
       - name: Publish to NuGet
         shell: pwsh
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
           $packages = Get-ChildItem -Path './packages' -Filter '*.nupkg' -ErrorAction SilentlyContinue
-          
+
           if ($packages.Count -eq 0) {
             Write-Warning "No .nupkg files found - nothing to publish"
             exit 0
           }
-          
+
           foreach ($package in $packages) {
             Write-Host "📤 Publishing $($package.Name) to NuGet.org" -ForegroundColor Cyan
-            
+
             dotnet nuget push $package.FullName `
               --api-key $env:NUGET_API_KEY `
               --source https://api.nuget.org/v3/index.json `
               --skip-duplicate
-            
+
             # Exit code 0 = success, 409 would be duplicate (handled by --skip-duplicate flag)
             if ($LASTEXITCODE -ne 0) {
               Write-Error "❌ Failed to publish $($package.Name)"
               exit $LASTEXITCODE
             }
-            
+
             Write-Host "✅ Successfully published $($package.Name)" -ForegroundColor Green
           }
-          
+
           Write-Host ""
           Write-Host "==========================================" -ForegroundColor Green
           Write-Host "✅ All packages published to NuGet.org" -ForegroundColor Green
@@ -744,7 +792,10 @@ jobs:
     needs: validate-release
     permissions:
       contents: write  # Required by docfx.yaml to push to gh-pages branch
-    uses: ./.github/workflows/docfx.yaml
+    # GitHub's `$/` self-repository syntax is preferred here, but actionlint
+    # (a required check) rejects it until rhysd/actionlint#732 ships. Switch
+    # to `$/.github/workflows/docfx.yaml` and drop the ignore when it does.
+    uses: ./.github/workflows/docfx.yaml  # zizmor: ignore[self-repository]
     with:
       version: ${{ github.event.release.tag_name }}
 
@@ -758,13 +809,13 @@ jobs:
       contents: write  # Required to upload assets to the GitHub Release
     steps:
       - name: Download NuGet packages artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           name: nuget-packages
           path: ./nuget-packages
 
       - name: Download coverage report artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           name: release-coverage
           path: ./release-coverage
@@ -781,7 +832,9 @@ jobs:
           TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           shopt -s nullglob
-          files=(./nuget-packages/*.nupkg ./nuget-packages/*.snupkg ./nuget-packages/*.bom.json release-coverage.zip)
+          files=(./nuget-packages/*.nupkg ./nuget-packages/*.snupkg ./nuget-packages/*.bom.json)
+          # nullglob only drops unmatched *patterns*; a literal name stays and would make
+          # `gh release upload` fail, so add the coverage zip only when it exists.
+          if [ -f release-coverage.zip ]; then files+=(release-coverage.zip); fi
           echo "Uploading ${#files[@]} asset(s) to release $TAG_NAME"
           gh release upload "$TAG_NAME" "${files[@]}" --clobber
-
