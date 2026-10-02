@@ -620,7 +620,7 @@ jobs:
 
           # Every test project runs here, *.Tests.Integration.* included: this is the
           # job that gates coverage, and every test assembly is held to
-          # CODECOV_TEST_MINIMUM. Linux runners have Docker, so Testcontainers-based
+          # CODECOV_MINIMUM. Linux runners have Docker, so Testcontainers-based
           # integration suites run as they do locally. (Integration projects used to be
           # excluded "for a separate workflow", which left them unmeasured everywhere.)
           mapfile -d '' -t test_projects < <(find ./tests -type f \( -name "*.csproj" -o -name "*.vbproj" -o -name "*.fsproj" \) -print0)
