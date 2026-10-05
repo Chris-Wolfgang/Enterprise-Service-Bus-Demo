@@ -220,8 +220,8 @@ if (-not $SkipTests -and -not $SkipCoverage -and $failed.Count -eq 0) {
         Write-Host "No coverage files found — skipping"
     }
     else {
-        # ReportGenerator is pinned in .config/dotnet-tools.json, exactly as pr.yaml
-        # uses it. Run it as a local tool: no global install, no PATH dependency, so
+        # ReportGenerator is pinned in .config/dotnet-tools.json and this script runs it
+        # as a local tool: no global install, no PATH dependency, so
         # it works from any shell or account that has `dotnet` on PATH.
         if (-not (Restore-LocalTools)) {
             $failed += "Coverage"
@@ -304,11 +304,12 @@ if (-not $SkipTests -and -not $SkipCoverage -and $failed.Count -eq 0) {
 if (-not $SkipSecurity) {
     Write-Step "Step 4: DevSkim Security Scan"
 
-    # Pinned in .config/dotnet-tools.json and run as a local tool, as pr.yaml does.
+    # Pinned in .config/dotnet-tools.json and run by this script as a local tool.
     # A global `devskim` lookup used to fail silently when ~/.dotnet/tools was not on
     # PATH: analyze never ran, no results file was written, and the step reported
     # "No security issues found". Any failure to run is now a failure.
     $devskimRan = $false
+    $devskimExit = $null
     if (Restore-LocalTools) {
         dotnet devskim analyze `
             --source-code . `
@@ -323,7 +324,13 @@ if (-not $SkipSecurity) {
 
     if (-not $devskimRan) {
         if (Test-Path "devskim-results.txt") { Get-Content "devskim-results.txt" -Raw | Write-Host }
-        Write-Fail "DevSkim did not complete successfully (exit code $devskimExit)"
+        if ($null -eq $devskimExit) {
+            # Restore-LocalTools failed, so DevSkim never ran and there is no exit code.
+            Write-Fail "DevSkim did not run: dotnet tool restore failed (see .config/dotnet-tools.json)"
+        }
+        else {
+            Write-Fail "DevSkim did not complete successfully (exit code $devskimExit)"
+        }
         $failed += "DevSkim"
         Remove-Item "devskim-results.txt" -ErrorAction SilentlyContinue
     }
