@@ -19,10 +19,10 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    
+
     <!-- Suppress warning about NetAnalyzers package since we're using SDK built-in -->
     <_SkipUpgradeNetAnalyzersNuGetWarning>true</_SkipUpgradeNetAnalyzersNuGetWarning>
-    
+
     <!-- Treat warnings as errors in Release builds -->
     <TreatWarningsAsErrors Condition="'$(Configuration)' == 'Release'">true</TreatWarningsAsErrors>
 
@@ -51,25 +51,25 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    
+
     <!-- AsyncFixer - Async/await best practices -->
     <PackageReference Include="AsyncFixer" Version="2.1.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    
+
     <!-- Microsoft Threading Analyzers - Thread safety -->
     <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    
+
     <!-- BannedApiAnalyzers - Prevent usage of specific APIs -->
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="4.14.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    
+
     <!-- Meziantou - Comprehensive code quality -->
     <PackageReference Include="Meziantou.Analyzer" Version="3.0.98">
       <PrivateAssets>all</PrivateAssets>
@@ -91,7 +91,7 @@
          Library projects under src/ should opt in; test / example /
          benchmark projects should not. Per-repo enablement is tracked as a
          follow-up maintenance issue. -->
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="3.3.4" Condition="Exists('PublicAPI.Shipped.txt') or Exists('PublicAPI.Unshipped.txt')">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" Condition="Exists('PublicAPI.Shipped.txt') or Exists('PublicAPI.Unshipped.txt')">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -121,6 +121,14 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
+
+  <ItemGroup Condition="$(_RelativeProjectDir.StartsWith('src/')) and Exists('$(MSBuildProjectDirectory)/obj/THIRD-PARTY-NOTICES.md')">
+    <!-- Third-party attribution: scripts/third-party-notices.ps1 renders the
+         package's transitive NuGet closure to obj/THIRD-PARTY-NOTICES.md
+         (release.yaml runs it between restore and pack) and it ships at the
+         package root. Generated, never committed - nothing to keep in sync. -->
+    <None Include="$(MSBuildProjectDirectory)/obj/THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- SourceLink: embed source provenance into PDBs so debuggers can step
