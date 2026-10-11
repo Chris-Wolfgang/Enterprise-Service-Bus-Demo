@@ -16,7 +16,7 @@
     "colorFamily": "blue",
     "colorShade": "dark",
     "fields": [
-      { "name": "CustomerId", "type": "text", "default": "CUST-{####}" },
+      { "name": "CustomerId", "type": "text", "default": "CUST{####}" },
       { "name": "Name",       "type": "text", "default": "Acme Corp {##}" }
     ]
   },
