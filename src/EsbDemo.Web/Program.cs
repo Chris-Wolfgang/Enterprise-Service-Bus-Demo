@@ -30,15 +30,16 @@ builder.Services.AddDbContext<DataWarehouseDbContext>(o => o.UseInMemoryDatabase
 var app = builder.Build();
 
 var configService = app.Services.GetRequiredService<ConfigService>();
-await configService.LoadAsync();
+await configService.LoadAsync().ConfigureAwait(false);
 
-await using (var scope = app.Services.CreateAsyncScope())
+var scope = app.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
 {
-    await scope.ServiceProvider.GetRequiredService<CrmDbContext>().Database.EnsureCreatedAsync();
-    await scope.ServiceProvider.GetRequiredService<ErpDbContext>().Database.EnsureCreatedAsync();
-    await scope.ServiceProvider.GetRequiredService<ECommerceDbContext>().Database.EnsureCreatedAsync();
-    await scope.ServiceProvider.GetRequiredService<CustomerPortalDbContext>().Database.EnsureCreatedAsync();
-    await scope.ServiceProvider.GetRequiredService<DataWarehouseDbContext>().Database.EnsureCreatedAsync();
+    await scope.ServiceProvider.GetRequiredService<CrmDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
+    await scope.ServiceProvider.GetRequiredService<ErpDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
+    await scope.ServiceProvider.GetRequiredService<ECommerceDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
+    await scope.ServiceProvider.GetRequiredService<CustomerPortalDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
+    await scope.ServiceProvider.GetRequiredService<DataWarehouseDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
 }
 
 _ = app.Services.GetRequiredService<MonitorService>();
@@ -62,4 +63,4 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-await app.RunAsync();
+await app.RunAsync().ConfigureAwait(false);

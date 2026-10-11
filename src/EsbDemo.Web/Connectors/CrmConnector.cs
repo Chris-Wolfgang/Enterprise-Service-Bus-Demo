@@ -88,7 +88,8 @@ public sealed class CrmConnector
         if (!fields.TryGetValue("CustomerId", out var customerId) || string.IsNullOrEmpty(customerId))
             return;
 
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        var scope = _scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
 
         var acct = await db.Accounts.FirstOrDefaultAsync(
@@ -154,7 +155,7 @@ public sealed class CrmConnector
             CreatedOn     = DateTime.UtcNow,
             ModifiedOn    = DateTime.UtcNow
         };
-        db.Accounts.Add(newAcct);
+        await db.Accounts.AddAsync(newAcct).ConfigureAwait(false);
         await db.SaveChangesAsync().ConfigureAwait(false);
         DataChanged?.Invoke();
     }

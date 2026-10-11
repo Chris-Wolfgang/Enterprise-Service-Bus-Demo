@@ -63,7 +63,8 @@ public sealed class CustomerPortalConnector
         if (!fields.TryGetValue("CustomerId", out var custNum) || string.IsNullOrEmpty(custNum))
             return;
 
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        var scope = _scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<CustomerPortalDbContext>();
 
         var cust = await db.Customers.FirstOrDefaultAsync(
@@ -78,7 +79,7 @@ public sealed class CustomerPortalConnector
                 fields.TryGetValue("Email", out var email);
                 fields.TryGetValue("Phone", out var phone);
 
-                db.Customers.Add(new PortalCustomer
+                await db.Customers.AddAsync(new PortalCustomer
                 {
                     CustNum     = custNum,
                     Name        = name ?? custNum,
@@ -86,7 +87,7 @@ public sealed class CustomerPortalConnector
                     Phone       = phone,
                     IsActive    = true,
                     CreatedDate = DateTime.UtcNow
-                });
+                }).ConfigureAwait(false);
                 await db.SaveChangesAsync().ConfigureAwait(false);
                 DataChanged?.Invoke();
             }

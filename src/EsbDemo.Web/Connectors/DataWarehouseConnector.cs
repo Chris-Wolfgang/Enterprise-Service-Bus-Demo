@@ -37,7 +37,8 @@ public sealed class DataWarehouseConnector
         if (!fields.TryGetValue("CustomerId", out var custNum) || string.IsNullOrEmpty(custNum))
             return;
 
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        var scope = _scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<DataWarehouseDbContext>();
 
         var row = await db.Customers.FirstOrDefaultAsync(
@@ -47,25 +48,7 @@ public sealed class DataWarehouseConnector
         if (string.Equals(topic, "account.created", StringComparison.Ordinal))
         {
             if (row is null)
-            {
-                fields.TryGetValue("Name",  out var name);
-                fields.TryGetValue("Email", out var email);
-                fields.TryGetValue("Phone", out var phone);
-
-                row = new DwCustomer
-                {
-                    CustNum       = custNum,
-                    Name          = name ?? custNum,
-                    Email         = email,
-                    Phone         = phone,
-                    IsActive      = true,
-                    FirstSeenDate = DateTime.UtcNow,
-                    LastUpdated   = DateTime.UtcNow
-                };
-                db.Customers.Add(row);
-                await db.SaveChangesAsync().ConfigureAwait(false);
-                DataChanged?.Invoke();
-            }
+                await AddCustomerAsync(db, custNum, fields).ConfigureAwait(false);
         }
         else if (string.Equals(topic, "account.updated", StringComparison.Ordinal))
         {
@@ -93,5 +76,28 @@ public sealed class DataWarehouseConnector
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke();
         }
+    }
+
+
+    /// <summary>Adds a <see cref="DwCustomer"/> for a customer the warehouse has not seen before.</summary>
+    private async Task AddCustomerAsync(DataWarehouseDbContext db, string custNum, Dictionary<string, string> fields)
+    {
+        fields.TryGetValue("Name",  out var name);
+        fields.TryGetValue("Email", out var email);
+        fields.TryGetValue("Phone", out var phone);
+
+        var row = new DwCustomer
+        {
+            CustNum       = custNum,
+            Name          = name ?? custNum,
+            Email         = email,
+            Phone         = phone,
+            IsActive      = true,
+            FirstSeenDate = DateTime.UtcNow,
+            LastUpdated   = DateTime.UtcNow
+        };
+        await db.Customers.AddAsync(row).ConfigureAwait(false);
+        await db.SaveChangesAsync().ConfigureAwait(false);
+        DataChanged?.Invoke();
     }
 }

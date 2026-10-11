@@ -113,7 +113,8 @@ public sealed class ErpConnector
         if (!fields.TryGetValue("CustomerId", out var customerId) || string.IsNullOrEmpty(customerId))
             return;
 
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        var scope = _scopeFactory.CreateAsyncScope();
+        await using var scopeDisposal = scope.ConfigureAwait(false);
         var db = scope.ServiceProvider.GetRequiredService<ErpDbContext>();
 
         // ERP identifies customers by CustNum, which equals the ESB's CustomerId

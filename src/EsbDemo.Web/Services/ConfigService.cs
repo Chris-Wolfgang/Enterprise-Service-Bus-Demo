@@ -41,12 +41,20 @@ public sealed class ConfigService
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         var appsPath = Path.Combine(_env.ContentRootPath, "config", "apps.json");
-        await using var appsStream = File.OpenRead(appsPath);
-        Apps = await JsonSerializer.DeserializeAsync<List<AppConfig>>(appsStream, options) ?? new List<AppConfig>();
+        var appsStream = File.OpenRead(appsPath);
+        await using (appsStream.ConfigureAwait(false))
+        {
+            Apps = await JsonSerializer.DeserializeAsync<List<AppConfig>>(appsStream, options).ConfigureAwait(false)
+                ?? new List<AppConfig>();
+        }
 
         var topicsPath = Path.Combine(_env.ContentRootPath, "config", "topics.json");
-        await using var topicsStream = File.OpenRead(topicsPath);
-        Topics = await JsonSerializer.DeserializeAsync<List<TopicConfig>>(topicsStream, options) ?? new List<TopicConfig>();
+        var topicsStream = File.OpenRead(topicsPath);
+        await using (topicsStream.ConfigureAwait(false))
+        {
+            Topics = await JsonSerializer.DeserializeAsync<List<TopicConfig>>(topicsStream, options).ConfigureAwait(false)
+                ?? new List<TopicConfig>();
+        }
     }
 
 
