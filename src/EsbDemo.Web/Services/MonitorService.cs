@@ -456,9 +456,15 @@ public sealed class MonitorService
     {
         await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None).ConfigureAwait(false);
 
+        // The reply describes the same customer or order as the request, so the request's values
+        // win. Generated defaults only fill fields the request did not carry or left empty, such
+        // as the CustomerId the ERP mints for account.created.
         var merged = new Dictionary<string, string>(originalFields);
         foreach (var kv in GenerateDefaultFields(responseTopic))
-            merged[kv.Key] = kv.Value;
+        {
+            if (!merged.TryGetValue(kv.Key, out var existing) || string.IsNullOrEmpty(existing))
+                merged[kv.Key] = kv.Value;
+        }
 
         var responseCorrelationId = BuildResponseCorrelationId(
             responseTopic, respondingApp, originalSourceApp, correlationId, merged
