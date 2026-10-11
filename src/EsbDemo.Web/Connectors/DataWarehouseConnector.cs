@@ -17,6 +17,13 @@ public sealed class DataWarehouseConnector
     public event Action? DataChanged;
 
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DataWarehouseConnector"/> class and registers its inbound handler
+    /// with <paramref name="monitor"/> under the app name <c>Data Warehouse</c>.
+    /// </summary>
+    /// <param name="monitor">The bus monitor that delivers messages to the Data Warehouse system.</param>
+    /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the Data Warehouse database.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
     public DataWarehouseConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
     {
         ArgumentNullException.ThrowIfNull(monitor);

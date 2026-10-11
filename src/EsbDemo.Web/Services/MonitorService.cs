@@ -4,6 +4,10 @@ using EsbDemo.Web.Models;
 
 namespace EsbDemo.Web.Services;
 
+/// <summary>
+/// The mock in-memory bus: routes published messages to subscribing apps, simulates apps going
+/// offline, and keeps the message log and account tracking that the UI displays.
+/// </summary>
 public sealed class MonitorService
 {
     private readonly ConfigService _config;
@@ -20,18 +24,39 @@ public sealed class MonitorService
     private readonly Dictionary<string, AccountRecord> _accountsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CancellationTokenSource> _pendingCreateCts = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Gets the name of the bus implementation in use. Defaults to <c>Mock</c>.
+    /// </summary>
     public string SelectedBus { get; private set; } = "Mock";
 
 
+    /// <summary>
+    /// Raised after the log, account tracking or app status changes.
+    /// </summary>
+    /// <remarks>
+    /// It can be raised from a thread-pool thread, so UI subscribers should marshal to their
+    /// renderer, for example with <c>InvokeAsync</c>.
+    /// </remarks>
     public event Action? OnChanged;
 
 
+    /// <summary>
+    /// Gets the message log, oldest first.
+    /// </summary>
     public IReadOnlyList<MonitorEntry> Entries => _entries;
 
 
+    /// <summary>
+    /// Gets a snapshot of the accounts tracked by correlation ID.
+    /// </summary>
     public IReadOnlyList<AccountRecord> Accounts => [.. _accountsByCorrelation.Values];
 
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MonitorService"/> class and sets every configured
+    /// app to its <see cref="AppConfig.DefaultOnline"/> status.
+    /// </summary>
+    /// <param name="config">The app and topic configuration, which must already be loaded.</param>
     public MonitorService(ConfigService config)
     {
         _config = config;
@@ -48,14 +73,30 @@ public sealed class MonitorService
         _handlers[appName] = handler;
 
 
+    /// <summary>
+    /// Gets a value indicating whether an app is online.
+    /// </summary>
+    /// <param name="appName">The app name, matched case-insensitively.</param>
+    /// <returns><see langword="true"/> if the app is online or unknown; otherwise <see langword="false"/>.</returns>
     public bool IsOnline(string appName) =>
         _onlineStatus.TryGetValue(appName, out var online) ? online : true;
 
 
+    /// <summary>
+    /// Gets the number of messages waiting for an offline app.
+    /// </summary>
+    /// <param name="appName">The app name, matched case-insensitively.</param>
+    /// <returns>The number of queued messages; 0 for an unknown app.</returns>
     public int GetQueuedCount(string appName) =>
         _queued.TryGetValue(appName, out var q) ? q.Count : 0;
 
 
+    /// <summary>
+    /// Takes an app online or offline. Messages for an offline app are queued; bringing it back
+    /// online delivers them in the order they were sent.
+    /// </summary>
+    /// <param name="appName">The app name, matched case-insensitively.</param>
+    /// <param name="online"><see langword="true"/> to take the app online; <see langword="false"/> to take it offline.</param>
     public void SetOnline(string appName, bool online)
     {
         _onlineStatus[appName] = online;
@@ -76,6 +117,11 @@ public sealed class MonitorService
     }
 
 
+    /// <summary>
+    /// Switches the bus implementation and resets the log, account tracking, pending timeouts and
+    /// queued messages.
+    /// </summary>
+    /// <param name="bus">The name of the bus to use.</param>
     public void SetBus(string bus)
     {
         SelectedBus = bus;
@@ -95,6 +141,23 @@ public sealed class MonitorService
     }
 
 
+    /// <summary>
+    /// Publishes a message to every app that subscribes to <paramref name="topic"/>.
+    /// </summary>
+    /// <remarks>
+    /// Each online subscriber logs the message and passes it to its connector; an offline subscriber
+    /// queues it. The source app logs its own copy without acting on it. An <c>account.create</c>
+    /// starts a 10-second wait for the matching <c>account.created</c>.
+    /// </remarks>
+    /// <param name="topic">The topic to publish.</param>
+    /// <param name="sourceApp">The name of the publishing app.</param>
+    /// <param name="correlationId">The correlation ID that links a request to its replies, or <see langword="null"/>.</param>
+    /// <param name="fields">The payload, keyed by field name. Each subscriber receives its own copy.</param>
+    /// <param name="isUserInitiated">
+    /// <see langword="true"/> when a person triggered the message. Only user-initiated messages fire
+    /// <see cref="AppConfig.AutoResponses"/>, which keeps replies from triggering further replies.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="fields"/> is <see langword="null"/>.</exception>
     public void Publish(
         string topic,
         string sourceApp,

@@ -19,6 +19,13 @@ public sealed class CrmConnector
     public event Action? DataChanged;
 
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CrmConnector"/> class and registers its inbound handler
+    /// with <paramref name="monitor"/> under the app name <c>CRM</c>.
+    /// </summary>
+    /// <param name="monitor">The bus monitor that delivers messages to the CRM system.</param>
+    /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the CRM database.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
     public CrmConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
     {
         ArgumentNullException.ThrowIfNull(monitor);
