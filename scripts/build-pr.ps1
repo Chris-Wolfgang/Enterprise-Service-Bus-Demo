@@ -1,7 +1,8 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Runs the same checks as the Windows section of pr.yaml locally.
+    Runs most of the Windows section of pr.yaml locally. Necessary before pushing,
+    but not sufficient - see .DESCRIPTION for what only CI runs.
 
 .DESCRIPTION
     Replicates the PR workflow's Windows stage locally so you can verify
@@ -11,6 +12,10 @@
       3. Generate coverage report and enforce threshold
       4. Run DevSkim security scan
       5. Run gitleaks secrets scan
+
+    It deliberately does NOT cover everything pr.yaml does. InspectCode, the
+    changelog-fragment check, the solution-consistency check and the coverage-row
+    ledger are CI-only, so a clean run here does not guarantee a green PR.
 
 .PARAMETER SkipTests
     Skip test execution (build only).
@@ -61,6 +66,21 @@ function Write-Fail($message) {
     Write-Host $message -ForegroundColor Red
 }
 
+
+# Restores the tools pinned in .config/dotnet-tools.json once per run. Local tools
+# resolve through the repo's manifest, so nothing needs ~/.dotnet/tools on PATH.
+$script:localToolsRestored = $false
+function Restore-LocalTools {
+    if ($script:localToolsRestored) { return $true }
+    dotnet tool restore | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "dotnet tool restore failed (see .config/dotnet-tools.json)"
+        return $false
+    }
+    $script:localToolsRestored = $true
+    return $true
+}
+
 # ============================================================================
 # STEP 1: Restore and Build
 # ============================================================================
@@ -87,6 +107,12 @@ else {
 # ============================================================================
 if (-not $SkipTests -and $failed.Count -eq 0) {
     Write-Step "Step 2: Run Tests (all target frameworks)"
+
+    # Results from an earlier run would be merged into this run's coverage report and could
+    # hide or invent misses; start every run from a clean slate.
+    foreach ($stale in @('TestResults', 'CoverageReport')) {
+        if (Test-Path $stale) { Remove-Item $stale -Recurse -Force }
+    }
 
     # Mirrors pr.yaml's Stage 2 TFM parity check (guard 3). Findings are
     # warnings (exit 0); a non-zero exit means the evaluation itself broke and
@@ -143,6 +169,25 @@ if (-not $SkipTests -and $failed.Count -eq 0) {
                 continue
             }
 
+            # Only projects that really run tests: an AOT smoke executable or a
+            # fixture under tests/ has nothing for the test adapter to execute and
+            # would trip the zero-tests guard below. IsTestProject comes from
+            # Microsoft.NET.Test.Sdk's props, imported per TFM after restore, so
+            # check it per framework and fall back to the PackageReference itself
+            # (mirrors scripts/tfm-parity.ps1).
+            $isTestProject = $false
+            foreach ($fw in $frameworks) {
+                $isTest = (dotnet msbuild $testProj.FullName -noLogo -p:Configuration=Release "-p:TargetFramework=$fw" -getProperty:IsTestProject 2>$null |
+                    Where-Object { $_ -and "$_".Trim() } | Select-Object -Last 1)
+                if (("$isTest" -replace '^IsTestProject[=:]\s*', '').Trim() -ieq 'true') { $isTestProject = $true; break }
+                $refs = (dotnet msbuild $testProj.FullName -noLogo -p:Configuration=Release "-p:TargetFramework=$fw" -getItem:PackageReference 2>$null | Out-String)
+                if ($refs.Trim() -and ((ConvertFrom-Json $refs).Items.PackageReference | Where-Object { $_.Identity -ieq 'Microsoft.NET.Test.Sdk' })) { $isTestProject = $true; break }
+            }
+            if (-not $isTestProject) {
+                Write-Host "  Not a test project (no IsTestProject / Microsoft.NET.Test.Sdk) — skipping dotnet test" -ForegroundColor Yellow
+                continue
+            }
+
             Write-Host "  Frameworks: $($frameworks -join ', ')"
 
             foreach ($fw in $frameworks) {
@@ -177,7 +222,8 @@ if (-not $SkipTests -and $failed.Count -eq 0) {
                 }
                 $testOutput = Get-Content $testLog -Raw
                 Remove-Item $testLog -Force -ErrorAction SilentlyContinue
-                if ($testOutput -match 'No test is available' -or $testOutput -notmatch '(?i)total:\s*[1-9][0-9]*') {
+                # verbosity=normal prints "Total tests: N"; minimal (pr.yaml) prints "Total: N" — accept both.
+                if ($testOutput -match 'No test is available' -or $testOutput -notmatch '(?i)total(?: tests)?:\s*[1-9][0-9]*') {
                     Write-Fail "  Zero tests ran for $fw — the test adapter found nothing to execute (missing/incompatible xunit.runner.visualstudio for this TFM?)"
                     $failed += "Tests (${fw}: zero ran)"
                     break
@@ -202,33 +248,21 @@ if (-not $SkipTests -and -not $SkipCoverage -and $failed.Count -eq 0) {
     $coverageFiles = Get-ChildItem -Path TestResults -Recurse -Filter coverage.cobertura.xml -ErrorAction SilentlyContinue
 
     if (-not $coverageFiles) {
-        Write-Host "No coverage files found — skipping"
+        # pr.yaml fails here rather than skipping: no coverage files means the collector
+        # produced nothing, so the gate cannot run - and a gate that cannot run must fail,
+        # or a local "all checks passed" hides a broken collector.
+        Write-Fail "No coverage files found - the collector produced nothing, so the coverage gate cannot run"
+        $failed += "Coverage"
     }
     else {
-        # Install ReportGenerator if not present
-        $rgPath = Get-Command reportgenerator -ErrorAction SilentlyContinue
-        if (-not $rgPath) {
-            Write-Host "Installing ReportGenerator..."
-            dotnet tool update -g dotnet-reportgenerator-globaltool 2>$null
-            if ($LASTEXITCODE -ne 0) { dotnet tool install -g dotnet-reportgenerator-globaltool }
-            # Ensure global tools dir is on PATH for this session. The .NET
-            # installer normally adds it to the user's profile, but a fresh
-            # shell or a pwsh-invoked-from-script session may not have it yet.
-            $globalToolsDir = if ($IsWindows -or $env:OS -eq 'Windows_NT') {
-                Join-Path $env:USERPROFILE '.dotnet\tools'
-            } else {
-                Join-Path $HOME '.dotnet/tools'
-            }
-            if (Test-Path $globalToolsDir -PathType Container) {
-                $sep = [IO.Path]::PathSeparator
-                $pathSegments = $env:PATH -split [regex]::Escape($sep)
-                if ($pathSegments -notcontains $globalToolsDir) {
-                    $env:PATH = "$globalToolsDir$sep$env:PATH"
-                }
-            }
+        # ReportGenerator is pinned in .config/dotnet-tools.json, exactly as pr.yaml
+        # uses it. Run it as a local tool: no global install, no PATH dependency, so
+        # it works from any shell or account that has `dotnet` on PATH.
+        if (-not (Restore-LocalTools)) {
+            $failed += "Coverage"
         }
 
-        reportgenerator `
+        dotnet reportgenerator `
             -reports:"TestResults/**/coverage.cobertura.xml" `
             -targetdir:"CoverageReport" `
             -reporttypes:"Html;TextSummary;MarkdownSummaryGithub;CsvSummary"
@@ -305,20 +339,30 @@ if (-not $SkipTests -and -not $SkipCoverage -and $failed.Count -eq 0) {
 if (-not $SkipSecurity) {
     Write-Step "Step 4: DevSkim Security Scan"
 
-    $devskim = Get-Command devskim -ErrorAction SilentlyContinue
-    if (-not $devskim) {
-        Write-Host "Installing DevSkim CLI..."
-        dotnet tool install --global Microsoft.CST.DevSkim.CLI
+    # Pinned in .config/dotnet-tools.json and run as a local tool, as pr.yaml does.
+    # A global `devskim` lookup used to fail silently when ~/.dotnet/tools was not on
+    # PATH: analyze never ran, no results file was written, and the step reported
+    # "No security issues found". Any failure to run is now a failure.
+    $devskimRan = $false
+    if (Restore-LocalTools) {
+        dotnet devskim analyze `
+            --source-code . `
+            --file-format text `
+            --output-file devskim-results.txt `
+            --ignore-rule-ids DS176209 `
+            --ignore-globs "**/api/**,**/CoverageReport/**,**/TestResults/**,**/.github/license-audit/**"
+        # Mirror pr.yaml, where a non-zero exit fails the DevSkim step.
+        $devskimExit = $LASTEXITCODE
+        $devskimRan = ($devskimExit -eq 0)
     }
 
-    devskim analyze `
-        --source-code . `
-        --file-format text `
-        --output-file devskim-results.txt `
-        --ignore-rule-ids DS176209 `
-        --ignore-globs "**/api/**,**/CoverageReport/**,**/TestResults/**"
-
-    if (Test-Path "devskim-results.txt") {
+    if (-not $devskimRan) {
+        if (Test-Path "devskim-results.txt") { Get-Content "devskim-results.txt" -Raw | Write-Host }
+        Write-Fail "DevSkim did not complete successfully (exit code $devskimExit)"
+        $failed += "DevSkim"
+        Remove-Item "devskim-results.txt" -ErrorAction SilentlyContinue
+    }
+    elseif (Test-Path "devskim-results.txt") {
         $results = Get-Content "devskim-results.txt" -Raw
         if ($results -and $results -match '(?i)(error|critical|high)') {
             Write-Host $results
