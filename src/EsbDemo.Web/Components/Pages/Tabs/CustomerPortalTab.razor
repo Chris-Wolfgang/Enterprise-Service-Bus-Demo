@@ -28,7 +28,7 @@
                     <td>
                         @if (cust.CustNum == _editId)
                         {
-                            <input class="cell-input" @bind="_editName" @bind:event="oninput" />
+                            <input class="cell-input" @bind="_editName" @bind:event="oninput" @onclick:stopPropagation />
                         }
                         else
                         {
@@ -38,7 +38,7 @@
                     <td>
                         @if (cust.CustNum == _editId)
                         {
-                            <input class="cell-input" @bind="_editEmail" @bind:event="oninput" />
+                            <input class="cell-input" @bind="_editEmail" @bind:event="oninput" @onclick:stopPropagation />
                         }
                         else
                         {
@@ -48,7 +48,7 @@
                     <td>
                         @if (cust.CustNum == _editId)
                         {
-                            <input class="cell-input cell-input-narrow" @bind="_editPhone" @bind:event="oninput" />
+                            <input class="cell-input cell-input-narrow" @bind="_editPhone" @bind:event="oninput" @onclick:stopPropagation />
                         }
                         else
                         {

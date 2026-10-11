@@ -27,7 +27,7 @@
                     <td>
                         @if (cust.CustNum == _editId)
                         {
-                            <input class="cell-input" @bind="_editName" @bind:event="oninput" />
+                            <input class="cell-input" @bind="_editName" @bind:event="oninput" @onclick:stopPropagation />
                         }
                         else
                         {
@@ -37,7 +37,7 @@
                     <td>
                         @if (cust.CustNum == _editId)
                         {
-                            <input class="cell-input" @bind="_editEmail" @bind:event="oninput" />
+                            <input class="cell-input" @bind="_editEmail" @bind:event="oninput" @onclick:stopPropagation />
                         }
                         else
                         {
@@ -55,7 +55,7 @@
                             <div class="edit-actions">
                                 <button class="btn-save" @onclick="SaveEdit">Save &amp; Publish</button>
                                 <button class="btn-cancel" @onclick="CancelEdit">Cancel</button>
-                                <span class="edit-hint">Saving will publish an <code>account.update</code> message to the ESB</span>
+                                <span class="edit-hint">Saving will publish an <code>account.updated</code> message to the ESB</span>
                             </div>
                         </td>
                     </tr>
