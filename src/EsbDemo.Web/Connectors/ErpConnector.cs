@@ -122,7 +122,14 @@ public sealed class ErpConnector
             c => c.CustNum == customerId
         ).ConfigureAwait(false);
 
-        if (cust is null) return;
+        if (cust is null)
+        {
+            // Only reached from the ERP's own account.created auto-response: store the minted customer.
+            if (string.Equals(topic, "account.created", StringComparison.Ordinal))
+                await CreateFromEsbAsync(db, customerId, fields).ConfigureAwait(false);
+
+            return;
+        }
 
         if (string.Equals(topic, "account.updated", StringComparison.Ordinal))
         {
@@ -150,5 +157,26 @@ public sealed class ErpConnector
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke();
         }
+    }
+
+    /// <summary>Adds the customer the ERP minted for an <c>account.created</c> reply.</summary>
+    private async Task CreateFromEsbAsync(ErpDbContext db, string customerId, Dictionary<string, string> fields)
+    {
+        fields.TryGetValue("Name",  out var name);
+        fields.TryGetValue("Email", out var email);
+        fields.TryGetValue("Phone", out var phone);
+
+        var cust = new CustMast
+        {
+            CustNum = customerId,
+            Name    = name ?? customerId,
+            Email   = email,
+            Phone   = phone,
+            AddDate = DateTime.UtcNow,
+            ModDate = DateTime.UtcNow
+        };
+        await db.CustMast.AddAsync(cust).ConfigureAwait(false);
+        await db.SaveChangesAsync().ConfigureAwait(false);
+        DataChanged?.Invoke();
     }
 }

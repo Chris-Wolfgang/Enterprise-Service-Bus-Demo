@@ -8,9 +8,18 @@ namespace EsbDemo.Web.Services;
 /// The mock in-memory bus: routes published messages to subscribing apps, simulates apps going
 /// offline, and keeps the message log and account tracking that the UI displays.
 /// </summary>
+/// <remarks>
+/// The service is a singleton shared by every circuit and is safe to call from any thread.
+/// <see cref="Entries"/> and <see cref="Accounts"/> return snapshots.
+/// </remarks>
 public sealed class MonitorService
 {
     private readonly ConfigService _config;
+
+    // Guards every collection below. Blazor circuits call in on their own threads, and the delayed
+    // auto-response and timeout tasks call in from the thread pool, so all access is serialized.
+    private readonly Lock _gate = new();
+
     private readonly List<MonitorEntry> _entries = new();
     private readonly Dictionary<string, bool> _onlineStatus = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Queue<QueuedMessage>> _queued = new(StringComparer.OrdinalIgnoreCase);
@@ -41,15 +50,30 @@ public sealed class MonitorService
 
 
     /// <summary>
-    /// Gets the message log, oldest first.
+    /// Gets a snapshot of the message log, oldest first.
     /// </summary>
-    public IReadOnlyList<MonitorEntry> Entries => _entries;
+    public IReadOnlyList<MonitorEntry> Entries
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _entries];
+        }
+    }
 
 
     /// <summary>
-    /// Gets a snapshot of the accounts tracked by correlation ID.
+    /// Gets a snapshot of the accounts tracked by correlation ID. The records are copies, so later
+    /// bus activity does not change them.
     /// </summary>
-    public IReadOnlyList<AccountRecord> Accounts => [.. _accountsByCorrelation.Values];
+    public IReadOnlyList<AccountRecord> Accounts
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _accountsByCorrelation.Values.Select(CopyOf)];
+        }
+    }
 
 
     /// <summary>
@@ -69,8 +93,18 @@ public sealed class MonitorService
     /// <paramref name="appName"/>. The handler is NOT called when the app itself is the source,
     /// preventing loops.
     /// </summary>
-    public void RegisterHandler(string appName, Func<string, Dictionary<string, string>, Task> handler) =>
-        _handlers[appName] = handler;
+    /// <remarks>
+    /// The handler is also called with the app's own auto-response, and awaited, before that reply
+    /// is published, so the responding system stores what it announces. For example, the ERP saves
+    /// the customer it mints for <c>account.created</c> before the other systems receive it.
+    /// </remarks>
+    /// <param name="appName">The app name, matched case-insensitively.</param>
+    /// <param name="handler">Receives the topic and a copy of the payload.</param>
+    public void RegisterHandler(string appName, Func<string, Dictionary<string, string>, Task> handler)
+    {
+        lock (_gate)
+            _handlers[appName] = handler;
+    }
 
 
     /// <summary>
@@ -78,8 +112,11 @@ public sealed class MonitorService
     /// </summary>
     /// <param name="appName">The app name, matched case-insensitively.</param>
     /// <returns><see langword="true"/> if the app is online or unknown; otherwise <see langword="false"/>.</returns>
-    public bool IsOnline(string appName) =>
-        _onlineStatus.TryGetValue(appName, out var online) ? online : true;
+    public bool IsOnline(string appName)
+    {
+        lock (_gate)
+            return IsOnlineCore(appName);
+    }
 
 
     /// <summary>
@@ -87,8 +124,11 @@ public sealed class MonitorService
     /// </summary>
     /// <param name="appName">The app name, matched case-insensitively.</param>
     /// <returns>The number of queued messages; 0 for an unknown app.</returns>
-    public int GetQueuedCount(string appName) =>
-        _queued.TryGetValue(appName, out var q) ? q.Count : 0;
+    public int GetQueuedCount(string appName)
+    {
+        lock (_gate)
+            return _queued.TryGetValue(appName, out var q) ? q.Count : 0;
+    }
 
 
     /// <summary>
@@ -99,17 +139,20 @@ public sealed class MonitorService
     /// <param name="online"><see langword="true"/> to take the app online; <see langword="false"/> to take it offline.</param>
     public void SetOnline(string appName, bool online)
     {
-        _onlineStatus[appName] = online;
-
-        if (online && _queued.TryGetValue(appName, out var queue))
+        lock (_gate)
         {
-            var app = _config.Apps.FirstOrDefault(
-                a => string.Equals(a.Name, appName, StringComparison.OrdinalIgnoreCase)
-            );
+            _onlineStatus[appName] = online;
 
-            while (queue.TryDequeue(out var msg))
+            if (online && _queued.TryGetValue(appName, out var queue))
             {
-                FlushQueuedMessage(app, appName, msg);
+                var app = _config.Apps.FirstOrDefault(
+                    a => string.Equals(a.Name, appName, StringComparison.OrdinalIgnoreCase)
+                );
+
+                while (queue.TryDequeue(out var msg))
+                {
+                    FlushQueuedMessage(app, appName, msg);
+                }
             }
         }
 
@@ -124,18 +167,21 @@ public sealed class MonitorService
     /// <param name="bus">The name of the bus to use.</param>
     public void SetBus(string bus)
     {
-        SelectedBus = bus;
-        _entries.Clear();
+        lock (_gate)
+        {
+            SelectedBus = bus;
+            _entries.Clear();
 
-        foreach (var cts in _pendingCreateCts.Values)
-            cts.Cancel();
+            foreach (var cts in _pendingCreateCts.Values)
+                cts.Cancel();
 
-        _pendingCreateCts.Clear();
-        _accountsByCorrelation.Clear();
-        _accountsById.Clear();
+            _pendingCreateCts.Clear();
+            _accountsByCorrelation.Clear();
+            _accountsById.Clear();
 
-        foreach (var q in _queued.Values)
-            q.Clear();
+            foreach (var q in _queued.Values)
+                q.Clear();
+        }
 
         NotifyChanged();
     }
@@ -167,37 +213,40 @@ public sealed class MonitorService
     {
         if (fields is null) throw new ArgumentNullException(nameof(fields));
 
-        var now = DateTimeOffset.UtcNow;
-
-        TrackAccountCreate(topic, sourceApp, correlationId, fields);
-
-        var oldAccountFields = CaptureOldAccountFields(topic, fields);
-
-        var summary = BuildSummary(fields);
-        var cssClass = _config.GetTopicCssClass(topic);
-
-        _entries.Add(
-            new MonitorEntry
-            {
-                Timestamp = now,
-                AppName = sourceApp,
-                Direction = "→ SEND",
-                Topic = topic,
-                CorrelationId = correlationId,
-                Summary = summary,
-                CssClass = cssClass
-            }
-        );
-
-        ResolveAccountCreated(topic, correlationId, fields);
-        UpdateAccountOnUpdated(topic, fields);
-
-        foreach (var app in _config.Apps.Where(a => a.Subscribes.Contains(topic)))
+        lock (_gate)
         {
-            DeliverToSubscriber(
-                app, topic, sourceApp, correlationId, fields,
-                summary, cssClass, now, isUserInitiated, oldAccountFields
+            var now = DateTimeOffset.UtcNow;
+
+            TrackAccountCreate(topic, sourceApp, correlationId, fields);
+
+            var oldAccountFields = CaptureOldAccountFields(topic, fields);
+
+            var summary = BuildSummary(fields);
+            var cssClass = _config.GetTopicCssClass(topic);
+
+            _entries.Add(
+                new MonitorEntry
+                {
+                    Timestamp = now,
+                    AppName = sourceApp,
+                    Direction = "→ SEND",
+                    Topic = topic,
+                    CorrelationId = correlationId,
+                    Summary = summary,
+                    CssClass = cssClass
+                }
             );
+
+            ResolveAccountCreated(topic, correlationId, fields);
+            UpdateAccountOnUpdated(topic, fields);
+
+            foreach (var app in _config.Apps.Where(a => a.Subscribes.Contains(topic)))
+            {
+                DeliverToSubscriber(
+                    app, topic, sourceApp, correlationId, fields,
+                    summary, cssClass, now, isUserInitiated, oldAccountFields
+                );
+            }
         }
 
         NotifyChanged();
@@ -332,7 +381,7 @@ public sealed class MonitorService
             CssClass = isSelfOrigin ? "topic-self" : cssClass
         };
 
-        if (IsOnline(app.Name))
+        if (IsOnlineCore(app.Name))
         {
             _entries.Add(recvEntry);
 
@@ -419,26 +468,33 @@ public sealed class MonitorService
         {
             await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
 
-            if (_accountsByCorrelation.TryGetValue(correlationId, out var record) &&
-                string.Equals(record.Status, "Pending", StringComparison.Ordinal))
+            var timedOut = false;
+            lock (_gate)
             {
-                record.Status = "Pending Create Finish";
+                if (_accountsByCorrelation.TryGetValue(correlationId, out var record) &&
+                    string.Equals(record.Status, "Pending", StringComparison.Ordinal))
+                {
+                    record.Status = "Pending Create Finish";
 
-                _entries.Add(
-                    new MonitorEntry
-                    {
-                        Timestamp = DateTimeOffset.UtcNow,
-                        AppName = record.SourceApp,
-                        Direction = "⚠ TIMEOUT",
-                        Topic = "account.create",
-                        CorrelationId = correlationId,
-                        Summary = "No response from ERP after 10s — account creation pending",
-                        CssClass = "topic-timeout"
-                    }
-                );
+                    _entries.Add(
+                        new MonitorEntry
+                        {
+                            Timestamp = DateTimeOffset.UtcNow,
+                            AppName = record.SourceApp,
+                            Direction = "⚠ TIMEOUT",
+                            Topic = "account.create",
+                            CorrelationId = correlationId,
+                            Summary = "No response from ERP after 10s — account creation pending",
+                            CssClass = "topic-timeout"
+                        }
+                    );
 
-                NotifyChanged();
+                    timedOut = true;
+                }
             }
+
+            if (timedOut)
+                NotifyChanged();
         }
         catch (OperationCanceledException)
         {
@@ -469,6 +525,15 @@ public sealed class MonitorService
         var responseCorrelationId = BuildResponseCorrelationId(
             responseTopic, respondingApp, originalSourceApp, correlationId, merged
         );
+
+        // Let the responding system store what it is about to announce (the ERP saves the customer
+        // it minted) before any other system receives the reply.
+        Func<string, Dictionary<string, string>, Task>? responderHandler;
+        lock (_gate)
+            _handlers.TryGetValue(respondingApp, out responderHandler);
+
+        if (responderHandler is not null)
+            await responderHandler(responseTopic, new Dictionary<string, string>(merged)).ConfigureAwait(false);
 
         Publish(responseTopic, respondingApp, responseCorrelationId, merged, isUserInitiated: false);
     }
@@ -520,6 +585,27 @@ public sealed class MonitorService
             _queued[app.Name] = new Queue<QueuedMessage>();
         }
     }
+
+
+    private static AccountRecord CopyOf(AccountRecord source)
+    {
+        var copy = new AccountRecord
+        {
+            CorrelationId = source.CorrelationId,
+            SourceApp = source.SourceApp,
+            CustomerId = source.CustomerId,
+            Status = source.Status
+        };
+
+        foreach (var kv in source.Fields)
+            copy.Fields[kv.Key] = kv.Value;
+
+        return copy;
+    }
+
+
+    private bool IsOnlineCore(string appName) =>
+        _onlineStatus.TryGetValue(appName, out var online) ? online : true;
 
 
     private void NotifyChanged() => OnChanged?.Invoke();
