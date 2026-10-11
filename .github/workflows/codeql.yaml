@@ -19,6 +19,7 @@ jobs:
   analyze:
     name: "Security Scan (CodeQL)"
     runs-on: windows-latest
+    timeout-minutes: 30
     permissions:
       actions: read
       contents: read
@@ -27,7 +28,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'csharp' ]
+        # 'csharp' analyses the compiled library (needs a build); 'actions'
+        # analyses the workflow files themselves (build-mode none, no build).
+        language: [ 'csharp', 'actions' ]
 
     steps:
     - name: Checkout repository
@@ -37,11 +40,12 @@ jobs:
 
     - name: Check for C# source code
       id: check-csharp
+      if: matrix.language == 'csharp'
       shell: pwsh
       run: |
         Write-Host "=== CodeQL C# Source Code Detection ===" -ForegroundColor Cyan
         Write-Host "Searching for C# source files using git index..." -ForegroundColor Cyan
-        
+
         # Use git ls-files to efficiently find C# files (respects .gitignore and doesn't traverse excluded dirs)
         $csharpFiles = @()
         try {
@@ -60,7 +64,7 @@ jobs:
           $csharpFiles = @(Get-ChildItem -Path . -Recurse -Include *.cs,*.csproj -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
         }
         $csharpFileCount = $csharpFiles.Count
-        
+
         Write-Host "" -ForegroundColor Cyan
         if ($csharpFileCount -eq 0) {
           Write-Host "⚠️  No C# source code found." -ForegroundColor Yellow
@@ -80,7 +84,7 @@ jobs:
     # the PR stays blocked even though this job passes. Upload an empty CodeQL
     # result under the same category so the rule sees an analysis with no alerts.
     - name: Write empty CodeQL SARIF (no C# code)
-      if: steps.check-csharp.outputs.has-csharp == 'false'
+      if: matrix.language == 'csharp' && steps.check-csharp.outputs.has-csharp == 'false'
       shell: pwsh
       run: |
         $sarif = @{
@@ -94,30 +98,29 @@ jobs:
         $sarif | ConvertTo-Json -Depth 10 | Set-Content -Path "$env:RUNNER_TEMP/codeql-empty.sarif" -Encoding utf8
 
     - name: Upload empty CodeQL SARIF (no C# code)
-      if: steps.check-csharp.outputs.has-csharp == 'false'
+      if: matrix.language == 'csharp' && steps.check-csharp.outputs.has-csharp == 'false'
       uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
       with:
         sarif_file: ${{ runner.temp }}/codeql-empty.sarif
         category: "/language:${{matrix.language}}"
 
     - name: Initialize CodeQL
-      if: steps.check-csharp.outputs.has-csharp == 'true'
+      if: matrix.language == 'actions' || steps.check-csharp.outputs.has-csharp == 'true'
       uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
       with:
         languages: ${{ matrix.language }}
-        # S1: use security-extended query suite (broader coverage than the
-        # CodeQL action's default suite — catches more variants of injection,
-        # deserialization, and dataflow vulnerabilities).
+        # security-extended adds the broader security query pack on top of the
+        # default queries (more rules, slightly longer scans).
         queries: security-extended
 
     - name: Setup .NET
-      if: steps.check-csharp.outputs.has-csharp == 'true'
+      if: matrix.language == 'csharp' && steps.check-csharp.outputs.has-csharp == 'true'
       uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
       with:
         dotnet-version: '10.0.x'
 
     - name: Restore .NET workloads
-      if: steps.check-csharp.outputs.has-csharp == 'true'
+      if: matrix.language == 'csharp' && steps.check-csharp.outputs.has-csharp == 'true'
       shell: pwsh
       run: |
         # Skip entirely if no csproj declares a workload-bearing TFM (android/ios/
@@ -146,14 +149,14 @@ jobs:
 
     - name: Build for CodeQL Analysis
       id: build
-      if: steps.check-csharp.outputs.has-csharp == 'true'
+      if: matrix.language == 'csharp' && steps.check-csharp.outputs.has-csharp == 'true'
       shell: pwsh
       run: |
         Write-Host "Building solution for CodeQL analysis..."
-        
+
         # Find solution file (.sln or .slnx)
         $solution = Get-ChildItem -Path . -Recurse -Depth 2 -Include "*.sln", "*.slnx" | Select-Object -First 1
-        
+
         if ($solution) {
           Write-Host "Found solution: $($solution.FullName)"
           dotnet restore $solution.FullName
@@ -179,12 +182,12 @@ jobs:
             exit $LASTEXITCODE
           }
         }
-        
+
         Write-Host "✅ Build completed for CodeQL analysis"
 
     - name: Perform CodeQL Analysis
       id: perform-codeql-analysis
-      if: steps.check-csharp.outputs.has-csharp == 'true'
+      if: matrix.language == 'actions' || steps.check-csharp.outputs.has-csharp == 'true'
       uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
       with:
         category: "/language:${{matrix.language}}"
@@ -192,37 +195,46 @@ jobs:
     - name: Complete Security Scan
       if: always()
       shell: pwsh
+      # Step outcomes/outputs arrive through env rather than template expansion so nothing
+      # attacker-influenced is ever spliced into the script (zizmor template-injection).
+      env:
+        MATRIX_LANGUAGE: ${{ matrix.language }}
+        CHECK_CSHARP_OUTCOME: ${{ steps.check-csharp.outcome }}
+        HAS_CSHARP: ${{ steps.check-csharp.outputs.has-csharp }}
+        BUILD_OUTCOME: ${{ steps.build.outcome }}
+        CODEQL_OUTCOME: ${{ steps.perform-codeql-analysis.outcome }}
       run: |
-        Write-Host "=== CodeQL Security Scan Complete ===" -ForegroundColor Cyan
-        
+        Write-Host "=== CodeQL Security Scan Complete ($env:MATRIX_LANGUAGE) ===" -ForegroundColor Cyan
+
         # Check the outcome of previous steps
-        $checkCsharpOutcome = "${{ steps.check-csharp.outcome }}"
-        $hasCsharp = "${{ steps.check-csharp.outputs.has-csharp }}"
-        $buildOutcome = "${{ steps.build.outcome }}"
-        $codeqlOutcome = "${{ steps.perform-codeql-analysis.outcome }}"
-        
+        $language = "$env:MATRIX_LANGUAGE"
+        $checkCsharpOutcome = "$env:CHECK_CSHARP_OUTCOME"
+        $hasCsharp = "$env:HAS_CSHARP"
+        $buildOutcome = "$env:BUILD_OUTCOME"
+        $codeqlOutcome = "$env:CODEQL_OUTCOME"
+
         # Determine overall status
         $hasFailure = $false
         $failureMessages = @()
-        
-        # Check if check-csharp step failed
+
+        # Check if check-csharp step failed (csharp leg only)
         if ($checkCsharpOutcome -eq "failure") {
           $hasFailure = $true
           $failureMessages += "❌ C# source code detection failed"
         }
-        
+
         # Check if build step failed (only relevant if C# code exists)
         if ($hasCsharp -eq "true" -and $buildOutcome -eq "failure") {
           $hasFailure = $true
           $failureMessages += "❌ Build failed during CodeQL analysis"
         }
-        
-        # Check if CodeQL analysis step failed (only relevant if C# code exists)
-        if ($hasCsharp -eq "true" -and $codeqlOutcome -eq "failure") {
+
+        # Check if CodeQL analysis step failed (either language leg)
+        if ($codeqlOutcome -eq "failure") {
           $hasFailure = $true
-          $failureMessages += "❌ CodeQL analysis failed"
+          $failureMessages += "❌ CodeQL analysis failed ($language)"
         }
-        
+
         # Display results based on actual step outcomes
         if ($hasFailure) {
           Write-Host "❌ Security scan completed with errors:" -ForegroundColor Red
@@ -230,14 +242,14 @@ jobs:
             Write-Host "   $msg" -ForegroundColor Red
           }
           exit 1
-        } elseif ($hasCsharp -eq "true") {
-          Write-Host "✅ CodeQL analysis completed successfully." -ForegroundColor Green
+        } elseif ($codeqlOutcome -eq "success") {
+          Write-Host "✅ CodeQL analysis completed successfully ($language)." -ForegroundColor Green
           Write-Host "   Results have been uploaded to GitHub Security." -ForegroundColor Green
         } elseif ($hasCsharp -eq "false") {
           Write-Host "✅ Security scan completed successfully (no C# code to analyze)." -ForegroundColor Green
           Write-Host "   This job ran successfully and reports a passing status to branch protection." -ForegroundColor Green
         } else {
-          Write-Host "✅ Security scan job completed." -ForegroundColor Green
+          Write-Host "✅ Security scan job completed ($language)." -ForegroundColor Green
           Write-Host "   Job status reported to branch protection." -ForegroundColor Green
         }
         Write-Host "========================================" -ForegroundColor Cyan
