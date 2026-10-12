@@ -246,7 +246,8 @@ public sealed class Properties
                     return sends == 1
                         && receivers.SequenceEqual(subscribers, StringComparer.Ordinal)
                         && handled.Select(h => h.App).SequenceEqual(subscribers.Where(s => !string.Equals(s, source, StringComparison.OrdinalIgnoreCase)), StringComparer.Ordinal)
-                        && handled.All(h => !ReferenceEquals(h.Fields, fields) && SameEntries(fields, h.Fields));
+                        && handled.All(h => !ReferenceEquals(h.Fields, fields) && SameEntries(fields, h.Fields))
+                        && handled.Select(h => h.Fields).Distinct(ReferenceEqualityComparer.Instance).Count() == handled.Count;
                 },
                 iter: FuzzIterations,
                 time: FuzzTimeSeconds
