@@ -15,6 +15,7 @@ namespace EsbDemo.Web.Services;
 public sealed class MonitorService
 {
     private readonly ConfigService _config;
+    private readonly TimeProvider _timeProvider;
 
     // Guards every collection below. Blazor circuits call in on their own threads, and the delayed
     // auto-response and timeout tasks call in from the thread pool, so all access is serialized.
@@ -82,8 +83,23 @@ public sealed class MonitorService
     /// </summary>
     /// <param name="config">The app and topic configuration, which must already be loaded.</param>
     public MonitorService(ConfigService config)
+        : this(config, TimeProvider.System)
+    {
+    }
+
+
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MonitorService"/> class with the clock that
+    /// timestamps entries and drives the auto-response and account-creation delays. Tests pass a
+    /// fake clock so those delays don't need real waiting.
+    /// </summary>
+    /// <param name="config">The app and topic configuration, which must already be loaded.</param>
+    /// <param name="timeProvider">The clock to use.</param>
+    internal MonitorService(ConfigService config, TimeProvider timeProvider)
     {
         _config = config;
+        _timeProvider = timeProvider;
         InitializeAppStatus();
     }
 
@@ -215,7 +231,7 @@ public sealed class MonitorService
 
         lock (_gate)
         {
-            var now = DateTimeOffset.UtcNow;
+            var now = _timeProvider.GetUtcNow();
 
             TrackAccountCreate(topic, sourceApp, correlationId, fields);
 
@@ -466,7 +482,7 @@ public sealed class MonitorService
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(10), _timeProvider, ct).ConfigureAwait(false);
 
             var timedOut = false;
             lock (_gate)
@@ -479,7 +495,7 @@ public sealed class MonitorService
                     _entries.Add(
                         new MonitorEntry
                         {
-                            Timestamp = DateTimeOffset.UtcNow,
+                            Timestamp = _timeProvider.GetUtcNow(),
                             AppName = record.SourceApp,
                             Direction = "⚠ TIMEOUT",
                             Topic = "account.create",
@@ -510,7 +526,7 @@ public sealed class MonitorService
         Dictionary<string, string> originalFields,
         string originalSourceApp)
     {
-        await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None).ConfigureAwait(false);
+        await Task.Delay(TimeSpan.FromMilliseconds(500), _timeProvider, CancellationToken.None).ConfigureAwait(false);
 
         // The reply describes the same customer or order as the request, so the request's values
         // win. Generated defaults only fill fields the request did not carry or left empty, such
@@ -567,7 +583,7 @@ public sealed class MonitorService
         var topicConfig = _config.GetTopic(topic);
         if (topicConfig is null) return new Dictionary<string, string>();
 
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var result = new Dictionary<string, string>();
 
         foreach (var field in topicConfig.Fields)
