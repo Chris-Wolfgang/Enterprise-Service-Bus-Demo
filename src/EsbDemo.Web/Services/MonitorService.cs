@@ -441,7 +441,8 @@ public sealed class MonitorService
                 Topic = msg.Topic,
                 CorrelationId = msg.CorrelationId,
                 Summary = summary,
-                CssClass = cssClass
+                CssClass = cssClass,
+                IsQueued = true
             }
         );
 

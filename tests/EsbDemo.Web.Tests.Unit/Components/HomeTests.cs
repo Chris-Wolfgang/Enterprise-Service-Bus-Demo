@@ -35,6 +35,23 @@ public sealed class HomeTests : ComponentTestBase
 
 
 
+    [Fact]
+    public void Home_styles_a_delivery_that_waited_in_the_queue_as_queued()
+    {
+        Monitor.SetOnline("ERP", online: false);
+        Monitor.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0001")));
+        Monitor.SetOnline("ERP", online: true);
+
+        var cut = Render<Home>();
+
+        var rows = cut.FindAll("tbody tr");
+        var queued = Assert.Single(rows, r => r.ClassList.Contains("queued"));
+        Assert.Equal("ERP", queued.QuerySelector(".col-app")!.TextContent);
+        Assert.Equal("row-recv queued", queued.ClassName);
+    }
+
+
+
     [Theory]
     [InlineData("CRM", ".crm-tab")]
     [InlineData("ERP", ".erp-container")]
