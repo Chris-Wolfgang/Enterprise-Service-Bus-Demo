@@ -113,6 +113,11 @@
     private string _clock = "";
     private System.Threading.Timer? _timer;
 
+    /// <summary>
+    /// Loads the ERP customer master and subscribes to <see cref="ErpConnector.DataChanged"/> so the list reloads
+    /// when a bus message changes the data. It also starts
+    /// the one-second timer that drives the terminal clock.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
@@ -125,6 +130,9 @@
         Connector.DataChanged += OnDataChanged;
     }
 
+    /// <summary>
+    /// Unsubscribes from <see cref="ErpConnector.DataChanged"/> and stops the terminal clock.
+    /// </summary>
     public void Dispose()
     {
         Connector.DataChanged -= OnDataChanged;

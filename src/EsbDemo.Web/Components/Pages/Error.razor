@@ -31,6 +31,9 @@
     private string? RequestId { get; set; }
     private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
 
+    /// <summary>
+    /// Takes the request id from the current <see cref="Activity"/>, falling back to the request's trace identifier.
+    /// </summary>
     protected override void OnInitialized() =>
         RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
 }

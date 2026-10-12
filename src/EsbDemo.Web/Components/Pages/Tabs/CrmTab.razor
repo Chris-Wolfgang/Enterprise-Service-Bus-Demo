@@ -89,12 +89,19 @@
     private string _editEmail = "";
     private string _editPhone = "";
 
+    /// <summary>
+    /// Loads the CRM accounts and subscribes to <see cref="CrmConnector.DataChanged"/> so the list reloads
+    /// when a bus message changes the data.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         _accounts = await Db.Accounts.AsNoTracking().OrderBy(a => a.AccountNumber).ToListAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
+    /// <summary>
+    /// Unsubscribes from <see cref="CrmConnector.DataChanged"/>.
+    /// </summary>
     public void Dispose() => Connector.DataChanged -= OnDataChanged;
 
     private void OnDataChanged() =>

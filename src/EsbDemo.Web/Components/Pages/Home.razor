@@ -88,6 +88,9 @@
 @code {
     private string _activeTab = "monitor";
 
+    /// <summary>
+    /// Subscribes to <see cref="MonitorService.OnChanged"/> so the monitor re-renders when the bus changes.
+    /// </summary>
     protected override void OnInitialized()
     {
         Monitor.OnChanged += OnMonitorChanged;
@@ -108,6 +111,9 @@
         });
     }
 
+    /// <summary>
+    /// Unsubscribes from <see cref="MonitorService.OnChanged"/>.
+    /// </summary>
     public void Dispose()
     {
         Monitor.OnChanged -= OnMonitorChanged;
