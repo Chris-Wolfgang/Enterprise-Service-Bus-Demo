@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EsbDemo.Core.Tests.Unit/EsbDemo.Core.Tests.Unit.csproj" />
+    <Project Path="tests/EsbDemo.Tests.Fuzz/EsbDemo.Tests.Fuzz.csproj" />
     <Project Path="tests/EsbDemo.Web.Tests.Unit/EsbDemo.Web.Tests.Unit.csproj" />
   </Folder>
 </Solution>
