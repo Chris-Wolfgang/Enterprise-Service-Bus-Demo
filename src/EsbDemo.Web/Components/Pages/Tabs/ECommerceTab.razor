@@ -71,12 +71,19 @@
     private string _editName = "";
     private string _editEmail = "";
 
+    /// <summary>
+    /// Loads the store's customers and subscribes to <see cref="ECommerceConnector.DataChanged"/> so the list reloads
+    /// when a bus message changes the data.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
+    /// <summary>
+    /// Unsubscribes from <see cref="ECommerceConnector.DataChanged"/>.
+    /// </summary>
     public void Dispose() => Connector.DataChanged -= OnDataChanged;
 
     private void OnDataChanged() =>

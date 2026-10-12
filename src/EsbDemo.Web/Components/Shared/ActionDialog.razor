@@ -63,6 +63,9 @@
 }
 
 @code {
+    /// <summary>
+    /// Gets or sets the callback that receives the composed message when the user sends it.
+    /// </summary>
     [Parameter]
     public EventCallback<ActionDialogResult> OnSubmit { get; set; }
 
@@ -75,6 +78,12 @@
     private string _accountFieldName = string.Empty;
 
 
+    /// <summary>
+    /// Opens the dialog for publishing <paramref name="topic"/> from <paramref name="sourceApp"/>,
+    /// with each text field prefilled from its configured default.
+    /// </summary>
+    /// <param name="topic">The topic to publish; its configured fields become the form.</param>
+    /// <param name="sourceApp">The name of the app the message is published from.</param>
     public void Open(string topic, string sourceApp)
     {
         _topic = topic;
