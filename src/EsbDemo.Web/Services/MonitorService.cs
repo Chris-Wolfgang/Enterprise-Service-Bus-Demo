@@ -621,7 +621,7 @@ public sealed class MonitorService
 
 
     private bool IsOnlineCore(string appName) =>
-        _onlineStatus.TryGetValue(appName, out var online) ? online : true;
+        !_onlineStatus.TryGetValue(appName, out var online) || online;
 
 
     private void NotifyChanged() => OnChanged?.Invoke(this, EventArgs.Empty);

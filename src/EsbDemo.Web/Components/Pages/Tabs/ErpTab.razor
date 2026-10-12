@@ -14,7 +14,7 @@
         {
             <div class="erp-trow">&nbsp;</div>
             <div class="erp-trow">&nbsp;</div>
-            <div class="erp-trow erp-trow-dim">@_divider</div>
+            <div class="erp-trow erp-trow-dim">@Divider</div>
             <div class="erp-trow">&nbsp;</div>
             <div class="erp-trow erp-trow-center">SELECT A CUSTOMER FROM THE LIST</div>
             <div class="erp-trow">&nbsp;</div>
@@ -22,7 +22,7 @@
         }
         else if (_mode == ErpMode.New)
         {
-            <div class="erp-trow erp-trow-dim">@_divider</div>
+            <div class="erp-trow erp-trow-dim">@Divider</div>
             <div class="erp-trow">&nbsp;</div>
             <div class="erp-trow erp-trow-center">*** NEW CUSTOMER ***</div>
             <div class="erp-trow">&nbsp;</div>
@@ -36,7 +36,7 @@
             <div class="erp-trow"><span class="erp-lbl">  TERMS ..... </span><input class="erp-input" @bind="_editTerms" @bind:event="oninput" maxlength="6" /><span class="erp-trow-dim">   (NET30/NET60/COD…)</span></div>
             <div class="erp-trow"><span class="erp-lbl">  CREDIT LIM  </span><input class="erp-input" @bind="_editCredit" @bind:event="oninput" maxlength="12" /></div>
             <div class="erp-trow">&nbsp;</div>
-            <div class="erp-trow erp-trow-dim">@_divider</div>
+            <div class="erp-trow erp-trow-dim">@Divider</div>
             <div class="erp-trow">&nbsp;</div>
             <div class="erp-trow"><span class="erp-key" @onclick="SaveNew">[F2=SAVE]</span><span class="erp-trow-dim">   </span><span class="erp-key erp-key-red" @onclick="CancelNew">[ESC=CANCEL]</span><span class="erp-trow-dim">  → publishes account.created</span></div>
         }
@@ -47,7 +47,7 @@
             {
                 var isActive = cust.IsActive;
                 var closedStr = cust.ClosedDate.HasValue ? cust.ClosedDate.Value.ToString("MM/dd/yy") : "";
-                <div class="erp-trow erp-trow-dim">@_divider</div>
+                <div class="erp-trow erp-trow-dim">@Divider</div>
                 <div class="erp-trow">&nbsp;</div>
                 <div class="erp-trow"><span class="erp-lbl">  CUST# ..... </span><span class="erp-val">@cust.CustNum.PadRight(14)</span><span class="erp-lbl">STATUS: </span><span class="@(isActive ? "erp-val-green" : "erp-val-red")">@(isActive ? "ACTIVE" : "INACTIVE")</span></div>
                 <div class="erp-trow"><span class="erp-lbl">  CLOSED DATE  </span><span class="@(isActive ? "erp-trow-dim" : "erp-val-red")">@(isActive ? "(open)" : closedStr)</span></div>
@@ -59,7 +59,7 @@
                 <div class="erp-trow"><span class="erp-lbl">  TYPE ...... </span><span class="erp-val">@cust.CustType.PadRight(12)</span><span class="erp-lbl">TERMS: </span><span class="erp-val">@(cust.Terms ?? "—")</span></div>
                 <div class="erp-trow"><span class="erp-lbl">  CREDIT LIM  </span><span class="erp-val-yellow">@cust.CreditLim.ToString("N2")</span></div>
                 <div class="erp-trow">&nbsp;</div>
-                <div class="erp-trow erp-trow-dim">@_divider</div>
+                <div class="erp-trow erp-trow-dim">@Divider</div>
                 <div class="erp-trow">&nbsp;</div>
                 <div class="erp-trow">@if (_mode == ErpMode.Edit)
                     {<span class="erp-key" @onclick="SaveEdit">[F2=SAVE]</span><span class="erp-trow-dim">   </span><span class="erp-key erp-key-red" @onclick="CancelEdit">[ESC=CANCEL]</span><span class="erp-trow-dim">  → publishes account.updated</span>}
@@ -98,7 +98,7 @@
 @code {
     private enum ErpMode { List, Detail, Edit, New }
 
-    private static readonly string _divider = new('─', 76);
+    private static readonly string Divider = new('─', 76);
 
     private List<CustMast> _customers = [];
     private string? _activeCustNum;
@@ -111,7 +111,7 @@
     private string _editCredit = "0.00";
     private string _newCustNum = "";
     private string _clock = "";
-    private System.Threading.Timer? _timer;
+    private Timer? _timer;
 
     /// <summary>
     /// Loads the ERP customer master and subscribes to <see cref="ErpConnector.DataChanged"/> so the list reloads
@@ -122,7 +122,7 @@
     {
         _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
         _clock = BuildClock();
-        _timer = new System.Threading.Timer(_ =>
+        _timer = new Timer(_ =>
         {
             _clock = BuildClock();
             InvokeAsync(StateHasChanged);
@@ -146,8 +146,12 @@
             StateHasChanged();
         });
 
-    private static string BuildClock() =>
-        $"  DATE: {DateTime.Now:MM/dd/yy}   TIME: {DateTime.Now:HH:mm:ss}   TERMINAL: ERP-01";
+    private static string BuildClock()
+    {
+        // One reading for both fields, so the date and time never straddle a second boundary.
+        var now = DateTimeOffset.Now;
+        return $"  DATE: {now:MM/dd/yy}   TIME: {now:HH:mm:ss}   TERMINAL: ERP-01";
+    }
 
     private void SelectRow(string custNum)
     {
