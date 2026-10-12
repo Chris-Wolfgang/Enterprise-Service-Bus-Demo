@@ -1,6 +1,6 @@
 @page "/"
 @inject MonitorService Monitor
-@inject IJSRuntime JS
+@inject IJSRuntime Js
 @implements IDisposable
 
 <PageTitle>ESB Demo</PageTitle>
@@ -107,7 +107,7 @@
         {
             StateHasChanged();
             if (_activeTab == "monitor")
-                await JS.InvokeVoidAsync("scrollMonitorToBottom", "monitor-container");
+                await Js.InvokeVoidAsync("scrollMonitorToBottom", "monitor-container");
         });
     }
 
