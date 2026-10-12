@@ -3,4 +3,7 @@
     <Project Path="src/EsbDemo.Core/EsbDemo.Core.csproj" />
     <Project Path="src/EsbDemo.Web/EsbDemo.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EsbDemo.Core.Tests.Unit/EsbDemo.Core.Tests.Unit.csproj" />
+  </Folder>
 </Solution>
