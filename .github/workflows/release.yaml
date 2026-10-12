@@ -226,6 +226,7 @@ jobs:
                   --configuration Release `
                   --no-build `
                   --no-restore `
+                  --settings coverlet.runsettings `
                   --collect:"XPlat Code Coverage" `
                   --results-directory "./TestResults" `
                   --logger "console;verbosity=minimal"
@@ -247,6 +248,7 @@ jobs:
                   --framework $fw `
                   --no-build `
                   --no-restore `
+                  --settings coverlet.runsettings `
                   --collect:"XPlat Code Coverage" `
                   --results-directory "./TestResults" `
                   --logger "console;verbosity=minimal"
