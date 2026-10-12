@@ -1,7 +1,6 @@
 using System;
 using System.Globalization;
 using EsbDemo.Core.Services;
-using Xunit;
 
 namespace EsbDemo.Core.Tests.Unit.Services;
 

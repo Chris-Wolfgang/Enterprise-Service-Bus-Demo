@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using EsbDemo.Core.Config;
-using Xunit;
 
 namespace EsbDemo.Core.Tests.Unit.Config;
 
