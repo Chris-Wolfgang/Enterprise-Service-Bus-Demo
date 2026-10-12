@@ -7,6 +7,14 @@ namespace EsbDemo.Web.Tests.Unit.Services;
 
 public sealed class MonitorServiceTests
 {
+    private static readonly Regex CustomerIdPattern = new("^CUST[0-9]{4}$", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+
+
+    private static readonly Regex OrderIdPattern = new("OrderId: ERP-[0-9]{4}", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+
+
     private static async Task<(MonitorService Sut, FakeTimeProvider Time)> CreateAsync()
     {
         var time = new FakeTimeProvider();
@@ -280,7 +288,7 @@ public sealed class MonitorServiceTests
         Assert.Contains("Name: Acme Corp 7", reply.Summary, StringComparison.Ordinal);
         var account = Assert.Single(sut.Accounts);
         Assert.Equal("Active", account.Status);
-        Assert.Matches(new Regex("^CUST[0-9]{4}$"), account.CustomerId);
+        Assert.Matches(CustomerIdPattern, account.CustomerId);
         Assert.Equal("Acme Corp 7", account.Fields["Name"]);
 
         time.Advance(TimeSpan.FromSeconds(10));
@@ -351,7 +359,7 @@ public sealed class MonitorServiceTests
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
         var reply = Sent(sut, "account.created")[0];
-        Assert.Matches(new Regex("^CUST[0-9]{4}$"), reply.CorrelationId);
+        Assert.Matches(CustomerIdPattern, reply.CorrelationId);
         Assert.Contains("CustomerId: " + reply.CorrelationId, reply.Summary, StringComparison.Ordinal);
     }
 
@@ -377,7 +385,7 @@ public sealed class MonitorServiceTests
         Assert.Equal("ERP", reply.AppName);
         Assert.Equal("ord-1", reply.CorrelationId);
         Assert.Contains("OrderRef: ORD-1234", reply.Summary, StringComparison.Ordinal);
-        Assert.Matches(new Regex("OrderId: ERP-[0-9]{4}"), reply.Summary);
+        Assert.Matches(OrderIdPattern, reply.Summary);
     }
 
 

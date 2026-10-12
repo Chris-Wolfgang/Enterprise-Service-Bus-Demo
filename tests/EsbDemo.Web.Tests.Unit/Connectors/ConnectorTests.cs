@@ -6,7 +6,6 @@ using EsbDemo.Web.Data.DataWarehouse;
 using EsbDemo.Web.Data.ECommerce;
 using EsbDemo.Web.Data.Erp;
 using EsbDemo.Web.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace EsbDemo.Web.Tests.Unit.Connectors;
 
@@ -294,22 +293,30 @@ public sealed class ConnectorTests
     [Fact]
     public async Task ERP_auto_response_saves_the_minted_customer_before_the_other_systems_receive_it()
     {
-        using var h = await ConnectorHarness.CreateAsync();
-        var erpHadCustomerWhenCrmChanged = false;
-        string? mintedId = null;
-        h.Crm.DataChanged += () =>
+        // Disposed explicitly, after the event handler below can no longer run.
+        var h = await ConnectorHarness.CreateAsync();
+        try
         {
-            mintedId = h.Query<CrmDbContext, string?>(db => db.Accounts.Single(a => a.Name == "Acme Corp 7").AccountNumber);
-            erpHadCustomerWhenCrmChanged = h.Query<ErpDbContext, bool>(db => db.CustMast.Any(c => c.CustNum == mintedId));
-        };
+            var erpHadCustomerWhenCrmChanged = false;
+            string? mintedId = null;
+            h.Crm.DataChanged += () =>
+            {
+                mintedId = h.Query<CrmDbContext, string?>(db => db.Accounts.Single(a => a.Name == "Acme Corp 7").AccountNumber);
+                erpHadCustomerWhenCrmChanged = h.Query<ErpDbContext, bool>(db => db.CustMast.Any(c => c.CustNum == mintedId));
+            };
 
-        h.Monitor.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme Corp 7"), ("Email", "a7@acme.com")), isUserInitiated: true);
-        h.Time.Advance(TimeSpan.FromMilliseconds(500));
-        await TestConfig.WaitUntilAsync(() => mintedId is not null);
+            h.Monitor.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme Corp 7"), ("Email", "a7@acme.com")), isUserInitiated: true);
+            h.Time.Advance(TimeSpan.FromMilliseconds(500));
+            await TestConfig.WaitUntilAsync(() => mintedId is not null);
 
-        Assert.True(erpHadCustomerWhenCrmChanged);
-        var erp = h.Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == mintedId));
-        Assert.Equal(("Acme Corp 7", "a7@acme.com"), (erp.Name, erp.Email));
+            Assert.True(erpHadCustomerWhenCrmChanged);
+            var erp = h.Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == mintedId));
+            Assert.Equal(("Acme Corp 7", "a7@acme.com"), (erp.Name, erp.Email));
+        }
+        finally
+        {
+            h.Dispose();
+        }
     }
 
 
