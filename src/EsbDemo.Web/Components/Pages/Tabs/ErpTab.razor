@@ -139,7 +139,7 @@
         _timer?.Dispose();
     }
 
-    private void OnDataChanged() =>
+    private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
         {
             _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();

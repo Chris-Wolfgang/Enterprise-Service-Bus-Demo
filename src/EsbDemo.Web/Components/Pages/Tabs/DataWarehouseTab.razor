@@ -60,7 +60,7 @@
     /// </summary>
     public void Dispose() => Connector.DataChanged -= OnDataChanged;
 
-    private void OnDataChanged() =>
+    private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
         {
             _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();

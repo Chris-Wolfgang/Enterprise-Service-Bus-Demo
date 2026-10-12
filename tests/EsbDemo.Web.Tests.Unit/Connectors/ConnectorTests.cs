@@ -136,11 +136,11 @@ public sealed class ConnectorTests
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = new List<string>();
-        h.Crm.DataChanged += () => changed.Add("CRM");
-        h.Erp.DataChanged += () => changed.Add("ERP");
-        h.ECommerce.DataChanged += () => changed.Add("eCommerce");
-        h.Portal.DataChanged += () => changed.Add("Portal");
-        h.Warehouse.DataChanged += () => changed.Add("DW");
+        h.Crm.DataChanged += (_, _) => changed.Add("CRM");
+        h.Erp.DataChanged += (_, _) => changed.Add("ERP");
+        h.ECommerce.DataChanged += (_, _) => changed.Add("eCommerce");
+        h.Portal.DataChanged += (_, _) => changed.Add("Portal");
+        h.Warehouse.DataChanged += (_, _) => changed.Add("DW");
 
         h.Monitor.Publish
         (
@@ -170,11 +170,11 @@ public sealed class ConnectorTests
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
-        h.Crm.DataChanged += () => changed++;
-        h.Erp.DataChanged += () => changed++;
-        h.ECommerce.DataChanged += () => changed++;
-        h.Portal.DataChanged += () => changed++;
-        h.Warehouse.DataChanged += () => changed++;
+        h.Crm.DataChanged += (_, _) => changed++;
+        h.Erp.DataChanged += (_, _) => changed++;
+        h.ECommerce.DataChanged += (_, _) => changed++;
+        h.Portal.DataChanged += (_, _) => changed++;
+        h.Warehouse.DataChanged += (_, _) => changed++;
 
         h.Monitor.Publish("account.deactivated", "Tester", "d-1", Fields(("CustomerId", "CUST0002"), ("Name", "Globex")));
         await TestConfig.WaitUntilAsync(() => changed == 5);
@@ -202,10 +202,10 @@ public sealed class ConnectorTests
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
-        h.Crm.DataChanged += () => changed++;
-        h.ECommerce.DataChanged += () => changed++;
-        h.Portal.DataChanged += () => changed++;
-        h.Warehouse.DataChanged += () => changed++;
+        h.Crm.DataChanged += (_, _) => changed++;
+        h.ECommerce.DataChanged += (_, _) => changed++;
+        h.Portal.DataChanged += (_, _) => changed++;
+        h.Warehouse.DataChanged += (_, _) => changed++;
 
         h.Monitor.Publish("account.created", "Tester", "c-1", Fields(("CustomerId", "CUST0042"), ("Email", "n@new.com"), ("Phone", "555-42")));
         await TestConfig.WaitUntilAsync(() => changed == 4);
@@ -227,11 +227,11 @@ public sealed class ConnectorTests
         using var h = await ConnectorHarness.CreateAsync();
         var crmChanged = 0;
         var othersChanged = 0;
-        h.Crm.DataChanged += () => crmChanged++;
-        h.Erp.DataChanged += () => othersChanged++;
-        h.ECommerce.DataChanged += () => othersChanged++;
-        h.Portal.DataChanged += () => othersChanged++;
-        h.Warehouse.DataChanged += () => othersChanged++;
+        h.Crm.DataChanged += (_, _) => crmChanged++;
+        h.Erp.DataChanged += (_, _) => othersChanged++;
+        h.ECommerce.DataChanged += (_, _) => othersChanged++;
+        h.Portal.DataChanged += (_, _) => othersChanged++;
+        h.Warehouse.DataChanged += (_, _) => othersChanged++;
 
         h.Monitor.Publish("account.updated", "Tester", "u-1", Fields(("CustomerId", "CUST0077"), ("Name", "Late Co")));
         await TestConfig.WaitUntilAsync(() => crmChanged == 1);
@@ -249,11 +249,11 @@ public sealed class ConnectorTests
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
-        h.Crm.DataChanged += () => changed++;
-        h.Erp.DataChanged += () => changed++;
-        h.ECommerce.DataChanged += () => changed++;
-        h.Portal.DataChanged += () => changed++;
-        h.Warehouse.DataChanged += () => changed++;
+        h.Crm.DataChanged += (_, _) => changed++;
+        h.Erp.DataChanged += (_, _) => changed++;
+        h.ECommerce.DataChanged += (_, _) => changed++;
+        h.Portal.DataChanged += (_, _) => changed++;
+        h.Warehouse.DataChanged += (_, _) => changed++;
 
         h.Monitor.Publish("account.deactivated", "Tester", "d-1", Fields(("CustomerId", "CUST0088")));
         h.Monitor.Publish("account.activated", "Tester", "a-1", Fields(("CustomerId", "CUST0088")));
@@ -271,11 +271,11 @@ public sealed class ConnectorTests
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
-        h.Crm.DataChanged += () => changed++;
-        h.Erp.DataChanged += () => changed++;
-        h.ECommerce.DataChanged += () => changed++;
-        h.Portal.DataChanged += () => changed++;
-        h.Warehouse.DataChanged += () => changed++;
+        h.Crm.DataChanged += (_, _) => changed++;
+        h.Erp.DataChanged += (_, _) => changed++;
+        h.ECommerce.DataChanged += (_, _) => changed++;
+        h.Portal.DataChanged += (_, _) => changed++;
+        h.Warehouse.DataChanged += (_, _) => changed++;
 
         h.Monitor.Publish("account.updated", "Tester", "u-1", Fields(("Name", "No Id")));
         h.Monitor.Publish("account.updated", "Tester", "u-2", Fields(("CustomerId", string.Empty)));
@@ -298,8 +298,8 @@ public sealed class ConnectorTests
         // Each connector raises DataChanged after it has saved, so the order of the events is the
         // order the systems stored the customer. The handlers capture only this list.
         var saved = new List<string>();
-        h.Erp.DataChanged += () => saved.Add("ERP");
-        h.Crm.DataChanged += () => saved.Add("CRM");
+        h.Erp.DataChanged += (_, _) => saved.Add("ERP");
+        h.Crm.DataChanged += (_, _) => saved.Add("CRM");
 
         h.Monitor.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme Corp 7"), ("Email", "a7@acme.com")), isUserInitiated: true);
         h.Time.Advance(TimeSpan.FromMilliseconds(500));

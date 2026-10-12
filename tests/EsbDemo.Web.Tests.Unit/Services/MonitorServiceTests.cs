@@ -156,7 +156,7 @@ public sealed class MonitorServiceTests
     {
         var (sut, _) = await CreateAsync();
         var raised = 0;
-        sut.OnChanged += () => raised++;
+        sut.OnChanged += (_, _) => raised++;
 
         sut.Publish("account.activated", "CRM", "c-1", Fields(("CustomerId", "CUST0001"), ("Name", "Acme")));
 
@@ -234,7 +234,7 @@ public sealed class MonitorServiceTests
         sut.Publish("account.updated", "CRM", "c-2", Fields(("CustomerId", "CUST0002")));
         time.Advance(TimeSpan.FromMinutes(1));
         var raised = 0;
-        sut.OnChanged += () => raised++;
+        sut.OnChanged += (_, _) => raised++;
 
         sut.SetOnline("ERP", online: true);
 
@@ -304,7 +304,7 @@ public sealed class MonitorServiceTests
         sut.SetOnline("ERP", online: false);
         sut.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme")), isUserInitiated: true);
         var raised = 0;
-        sut.OnChanged += () => raised++;
+        sut.OnChanged += (_, _) => raised++;
 
         time.Advance(TimeSpan.FromSeconds(10));
         await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
@@ -541,7 +541,7 @@ public sealed class MonitorServiceTests
         sut.SetOnline("ERP", online: false);
         sut.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme")), isUserInitiated: true);
         var raised = 0;
-        sut.OnChanged += () => raised++;
+        sut.OnChanged += (_, _) => raised++;
 
         sut.SetBus("Kafka");
         time.Advance(TimeSpan.FromSeconds(10));

@@ -17,7 +17,7 @@ public sealed class ErpConnector
 
 
     /// <summary>Fired after an inbound ESB message updates the ERP database.</summary>
-    public event Action? DataChanged;
+    public event EventHandler? DataChanged;
 
 
     /// <summary>
@@ -139,7 +139,7 @@ public sealed class ErpConnector
             if (fields.TryGetValue("Phone", out var phone)) cust.Phone = phone;
             cust.ModDate = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
         else if (string.Equals(topic, "account.deactivated", StringComparison.Ordinal))
         {
@@ -147,7 +147,7 @@ public sealed class ErpConnector
             cust.ClosedDate = DateTime.UtcNow;
             cust.ModDate    = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
         else if (string.Equals(topic, "account.activated", StringComparison.Ordinal))
         {
@@ -155,7 +155,7 @@ public sealed class ErpConnector
             cust.ClosedDate = null;
             cust.ModDate    = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -177,6 +177,6 @@ public sealed class ErpConnector
         };
         await db.CustMast.AddAsync(cust).ConfigureAwait(false);
         await db.SaveChangesAsync().ConfigureAwait(false);
-        DataChanged?.Invoke();
+        DataChanged?.Invoke(this, EventArgs.Empty);
     }
 }
