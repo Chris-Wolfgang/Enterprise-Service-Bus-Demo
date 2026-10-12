@@ -1,0 +1,162 @@
+name: Fuzz
+
+# Continuous fuzz — the long-running counterpart to the per-PR test suite.
+#
+# tests/EsbDemo.Tests.Fuzz asserts invariants over generated templates, clocks and bus traffic;
+# FUZZ_ITERATIONS and FUZZ_TIME_SECONDS decide how hard. The per-PR run uses the project's small
+# defaults so a pull request is not held up; this workflow runs 100,000 cases per property with a
+# five-minute budget each, weekly, to reach inputs a short pass never generates.
+#
+# On a finding it files ONE issue and comments on it thereafter, rather than filing a new issue per
+# run. That is deliberate: a detector that opens a duplicate every week gets muted, and one that
+# silently does nothing when an issue is already open stops being a detector at all. The comment is
+# the middle path - a recurring finding stays visible on the existing thread.
+
+on:
+  schedule:
+    # Mondays, early UTC. Off the hour to avoid the top-of-hour scheduling crush.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: Cases to run per property
+        required: false
+        default: '100000'
+      time_seconds:
+        description: Per-property time budget in seconds - a floor, so the run takes this times the number of properties
+        required: false
+        default: '300'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: Fuzz the placeholder resolver and the bus
+    runs-on: ubuntu-latest
+    # CsCheck's time budget is a FLOOR per property, not a ceiling on the run: each property runs
+    # for its full budget. Eight properties at the 300-second default is ~40 minutes, so the timeout
+    # has to clear that with room for restore and startup.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write   # only to report a finding; see the note above
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Detect the fuzz project
+        id: detect
+        run: |
+          if [ -d tests/EsbDemo.Tests.Fuzz ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No fuzz project - nothing to run."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup .NET
+        if: steps.detect.outputs.found == 'true'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the properties
+        id: fuzz
+        if: steps.detect.outputs.found == 'true'
+        # The output goes to a file rather than through a pipe: the default `run:` shell is
+        # `bash -e` WITHOUT pipefail, so `dotnet test | tee` would report tee's exit code and a
+        # failing run would look green.
+        env:
+          FUZZ_ITERATIONS: ${{ inputs.iterations || '100000' }}
+          FUZZ_TIME_SECONDS: ${{ inputs.time_seconds || '300' }}
+        run: |
+          mkdir -p fuzz-results
+          echo "FUZZ_ITERATIONS=$FUZZ_ITERATIONS FUZZ_TIME_SECONDS=$FUZZ_TIME_SECONDS"
+
+          if dotnet test tests/EsbDemo.Tests.Fuzz/EsbDemo.Tests.Fuzz.csproj \
+              --configuration Release \
+              --logger "trx;LogFileName=fuzz.trx" \
+              --results-directory fuzz-results \
+              > fuzz-results/fuzz.log 2>&1
+          then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          cat fuzz-results/fuzz.log
+
+      - name: Upload the run's output
+        # Uploaded whether or not it failed: CsCheck prints the shrunk counterexample AND the seed
+        # that reproduces it, which is the only durable record of a finding once the runner is gone.
+        if: always() && steps.detect.outputs.found == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: fuzz-results
+          path: fuzz-results/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Report a finding
+        if: steps.fuzz.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ITERATIONS: ${{ inputs.iterations || '100000' }}
+        run: |
+          # The failing property, its shrunk counterexample and its seed are all in the tail of the
+          # log. Keep it short enough to read in a notification and point at the artifact for the rest.
+          tail -n 60 fuzz-results/fuzz.log > finding.txt
+
+          # Every line with a backtick is DOUBLE-quoted with the backtick escaped, and the log is
+          # indented into a Markdown code block rather than fenced. Backticks inside a single-quoted
+          # echo argument are an expansion that will never happen as far as shellcheck is concerned
+          # (SC2016), and actionlint fails the run on it. A heredoc would read better but its body
+          # cannot be indented inside a YAML block scalar without becoming part of the Markdown.
+          {
+            echo "A fuzz property failed on the scheduled run."
+            echo
+            echo "- Run: $RUN_URL"
+            echo "- Cases per property: $ITERATIONS"
+            echo "- Full log and TRX: the \`fuzz-results\` artifact on that run."
+            echo
+            echo "CsCheck reports the shrunk counterexample and the seed that reproduces it. To"
+            echo "replay it deterministically, pass that seed to the property's \`Sample\` call:"
+            echo "\`Sample(..., seed: \"<the seed from the log>\")\`. Once the case is understood,"
+            echo "keep it as a named unit test - a regression test beats a rerun of the fuzzer."
+            echo
+            echo "Last 60 lines of the log:"
+            echo
+            sed 's/^/    /' finding.txt
+          } > body.md
+
+          # One thread per finding. `--search` matches the title marker below, so this does not
+          # depend on a label existing in the repository.
+          existing=$(gh issue list --state open --search 'in:title "Fuzz finding"' --json number --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            echo "Commenting on the open finding #$existing rather than filing a duplicate."
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create \
+              --title "Fuzz finding: a property failed on the scheduled run" \
+              --label bug \
+              --label "maintenance - testing" \
+              --body-file body.md
+          fi
+
+      - name: Fail the run when a property failed
+        # Separate from the report step so that a reporting problem - a rate limit, a missing label -
+        # cannot swallow the finding itself.
+        if: steps.fuzz.outputs.failed == 'true'
+        run: |
+          echo "::error::A fuzz property failed. See the fuzz-results artifact and the filed issue."
+          exit 1
