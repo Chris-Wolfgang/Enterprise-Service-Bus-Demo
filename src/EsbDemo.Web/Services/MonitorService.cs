@@ -47,7 +47,7 @@ public sealed class MonitorService
     /// It can be raised from a thread-pool thread, so UI subscribers should marshal to their
     /// renderer, for example with <c>InvokeAsync</c>.
     /// </remarks>
-    public event Action? OnChanged;
+    public event EventHandler? OnChanged;
 
 
     /// <summary>
@@ -624,7 +624,7 @@ public sealed class MonitorService
         _onlineStatus.TryGetValue(appName, out var online) ? online : true;
 
 
-    private void NotifyChanged() => OnChanged?.Invoke();
+    private void NotifyChanged() => OnChanged?.Invoke(this, EventArgs.Empty);
 
 
     private static string? BuildReceiverSummary(

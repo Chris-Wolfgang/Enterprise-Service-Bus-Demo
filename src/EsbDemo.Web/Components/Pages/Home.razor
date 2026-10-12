@@ -101,7 +101,7 @@
         _activeTab = tab;
     }
 
-    private void OnMonitorChanged()
+    private void OnMonitorChanged(object? sender, EventArgs e)
     {
         InvokeAsync(async () =>
         {

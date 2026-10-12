@@ -16,7 +16,7 @@ public sealed class CrmConnector
 
 
     /// <summary>Fired after an inbound ESB message updates the CRM database.</summary>
-    public event Action? DataChanged;
+    public event EventHandler? DataChanged;
 
 
     /// <summary>
@@ -110,7 +110,7 @@ public sealed class CrmConnector
             if (fields.TryGetValue("Phone", out var phone)) acct.Telephone1     = phone;
             acct.ModifiedOn = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
         else if (string.Equals(topic, "account.deactivated", StringComparison.Ordinal))
         {
@@ -118,7 +118,7 @@ public sealed class CrmConnector
             acct.StatusCode = AccountStatusCode.Inactive;
             acct.ModifiedOn = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
         else if (string.Equals(topic, "account.activated", StringComparison.Ordinal))
         {
@@ -126,7 +126,7 @@ public sealed class CrmConnector
             acct.StatusCode = AccountStatusCode.Active;
             acct.ModifiedOn = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -157,6 +157,6 @@ public sealed class CrmConnector
         };
         await db.Accounts.AddAsync(newAcct).ConfigureAwait(false);
         await db.SaveChangesAsync().ConfigureAwait(false);
-        DataChanged?.Invoke();
+        DataChanged?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -14,7 +14,7 @@ public sealed class DataWarehouseConnector
 
 
     /// <summary>Fired after an inbound ESB message updates the Data Warehouse database.</summary>
-    public event Action? DataChanged;
+    public event EventHandler? DataChanged;
 
 
     /// <summary>
@@ -58,7 +58,7 @@ public sealed class DataWarehouseConnector
             if (fields.TryGetValue("Phone", out var phone)) row.Phone = phone;
             row.LastUpdated = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
         else if (string.Equals(topic, "account.deactivated", StringComparison.Ordinal))
         {
@@ -66,7 +66,7 @@ public sealed class DataWarehouseConnector
             row.IsActive    = false;
             row.LastUpdated = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
         else if (string.Equals(topic, "account.activated", StringComparison.Ordinal))
         {
@@ -74,7 +74,7 @@ public sealed class DataWarehouseConnector
             row.IsActive    = true;
             row.LastUpdated = DateTime.UtcNow;
             await db.SaveChangesAsync().ConfigureAwait(false);
-            DataChanged?.Invoke();
+            DataChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -98,6 +98,6 @@ public sealed class DataWarehouseConnector
         };
         await db.Customers.AddAsync(row).ConfigureAwait(false);
         await db.SaveChangesAsync().ConfigureAwait(false);
-        DataChanged?.Invoke();
+        DataChanged?.Invoke(this, EventArgs.Empty);
     }
 }
