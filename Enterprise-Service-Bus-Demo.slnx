@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EsbDemo.Core/EsbDemo.Core.csproj" />
+    <Project Path="src/EsbDemo.Web/EsbDemo.Web.csproj" />
+  </Folder>
+</Solution>

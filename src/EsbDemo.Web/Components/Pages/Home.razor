@@ -1,0 +1,115 @@
+@page "/"
+@inject MonitorService Monitor
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>ESB Demo</PageTitle>
+
+<div class="tabs-bar">
+    <button class="tab-btn @(_activeTab == "monitor" ? "active" : "")" @onclick='() => SetTab("monitor")'>Monitor</button>
+    <button class="tab-btn @(_activeTab == "crm" ? "active" : "")" @onclick='() => SetTab("crm")'>CRM</button>
+    <button class="tab-btn @(_activeTab == "erp" ? "active" : "")" @onclick='() => SetTab("erp")'>ERP</button>
+    <button class="tab-btn @(_activeTab == "ecommerce" ? "active" : "")" @onclick='() => SetTab("ecommerce")'>eCommerce</button>
+    <button class="tab-btn @(_activeTab == "wms" ? "active" : "")" @onclick='() => SetTab("wms")'>WMS</button>
+    <button class="tab-btn @(_activeTab == "portal" ? "active" : "")" @onclick='() => SetTab("portal")'>Customer Portal</button>
+    <button class="tab-btn @(_activeTab == "dw" ? "active" : "")" @onclick='() => SetTab("dw")'>Data Warehouse</button>
+</div>
+
+<div class="tab-content">
+    @if (_activeTab == "monitor")
+    {
+        <div class="monitor-container" id="monitor-container">
+            @if (!Monitor.Entries.Any())
+            {
+                <div class="monitor-empty">
+                    <p>No messages yet. Use the application panel on the left to trigger actions.</p>
+                </div>
+            }
+            else
+            {
+                <table class="monitor-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Topic</th>
+                            <th>Application</th>
+                            <th>Direction</th>
+                            <th>Corr. ID</th>
+                            <th>Summary</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Monitor.Entries)
+                        {
+                            var isSend = entry.Direction == "→ SEND";
+                            var rowClass = $"{(isSend ? "row-send" : "row-recv")} {(entry.IsQueued ? "queued" : "")}".Trim();
+                            <tr class="@rowClass">
+                                <td class="col-time">@entry.Timestamp.ToString("HH:mm:ss")</td>
+                                <td class="col-topic"><span class="topic-badge @entry.CssClass">@entry.Topic</span></td>
+                                <td class="col-app">@entry.AppName</td>
+                                <td class="col-dir">
+                                    <span class="dir-badge @(isSend ? "dir-send" : "dir-recv")">@entry.Direction</span>
+                                </td>
+                                <td class="col-corr">@(entry.CorrelationId ?? "—")</td>
+                                <td class="col-summary">@entry.Summary</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+    else if (_activeTab == "crm")
+    {
+        <CrmTab />
+    }
+    else if (_activeTab == "erp")
+    {
+        <ErpTab />
+    }
+    else if (_activeTab == "ecommerce")
+    {
+        <ECommerceTab />
+    }
+    else if (_activeTab == "wms")
+    {
+        <WmsTab />
+    }
+    else if (_activeTab == "portal")
+    {
+        <CustomerPortalTab />
+    }
+    else if (_activeTab == "dw")
+    {
+        <DataWarehouseTab />
+    }
+</div>
+
+@code {
+    private string _activeTab = "monitor";
+
+    protected override void OnInitialized()
+    {
+        Monitor.OnChanged += OnMonitorChanged;
+    }
+
+    private void SetTab(string tab)
+    {
+        _activeTab = tab;
+    }
+
+    private void OnMonitorChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            if (_activeTab == "monitor")
+                await JS.InvokeVoidAsync("scrollMonitorToBottom", "monitor-container");
+        });
+    }
+
+    public void Dispose()
+    {
+        Monitor.OnChanged -= OnMonitorChanged;
+    }
+}

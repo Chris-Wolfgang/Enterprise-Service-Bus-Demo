@@ -1,0 +1,146 @@
+@inject ConfigService Config
+@inject MonitorService Monitor
+
+@if (_isOpen)
+{
+    <div class="dialog-backdrop" @onclick="Cancel">
+        <div class="dialog-panel" @onclick:stopPropagation="true">
+            <div class="dialog-header">
+                <span class="dialog-title">@Config.GetTopicLabel(_topic)</span>
+                <span class="dialog-subtitle">@_sourceApp → @_topic</span>
+            </div>
+            <div class="dialog-body">
+                @foreach (var field in _topicFields)
+                {
+                    <div class="dialog-field">
+                        <label class="dialog-label">@field.Name</label>
+                        @if (string.Equals(field.Type, "account", StringComparison.Ordinal))
+                        {
+                            @if (!Monitor.Accounts.Any())
+                            {
+                                <p class="dialog-no-customers">No customers created yet. Use Create Customer first.</p>
+                            }
+                            else
+                            {
+                                <select class="dialog-input dialog-select" @onchange="e => OnAccountSelected(field.Name, e)">
+                                    <option value="">— select a customer —</option>
+                                    @foreach (var account in Monitor.Accounts.Where(a => a.CustomerId != null))
+                                    {
+                                        account.Fields.TryGetValue("Name", out var aName);
+                                        <option value="@account.CustomerId">@account.CustomerId — @aName</option>
+                                    }
+                                    @if (Monitor.Accounts.Any(a => a.CustomerId == null))
+                                    {
+                                        <optgroup label="Pending">
+                                            @foreach (var account in Monitor.Accounts.Where(a => a.CustomerId == null))
+                                            {
+                                                account.Fields.TryGetValue("Name", out var aName);
+                                                <option value="" disabled>⏳ @aName [@account.Status]</option>
+                                            }
+                                        </optgroup>
+                                    }
+                                </select>
+                            }
+                        }
+                        else
+                        {
+                            <input class="dialog-input"
+                                   type="text"
+                                   value="@(_fields.TryGetValue(field.Name, out var v) ? v : string.Empty)"
+                                   @oninput="e => UpdateField(field.Name, e.Value?.ToString() ?? string.Empty)" />
+                        }
+                    </div>
+                }
+            </div>
+            <div class="dialog-footer">
+                <button class="btn-cancel" @onclick="Cancel">Cancel</button>
+                <button class="btn-submit"
+                        disabled="@(_hasAccountField && !_fields.ContainsKey(_accountFieldName))"
+                        @onclick="Submit">Send Message</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public EventCallback<ActionDialogResult> OnSubmit { get; set; }
+
+    private bool _isOpen;
+    private string _topic = string.Empty;
+    private string _sourceApp = string.Empty;
+    private List<FieldConfig> _topicFields = new();
+    private Dictionary<string, string> _fields = new();
+    private bool _hasAccountField;
+    private string _accountFieldName = string.Empty;
+
+
+    public void Open(string topic, string sourceApp)
+    {
+        _topic = topic;
+        _sourceApp = sourceApp;
+
+        var topicConfig = Config.GetTopic(topic);
+        _topicFields = topicConfig?.Fields ?? new List<FieldConfig>();
+
+        var accountField = _topicFields.FirstOrDefault(f => string.Equals(f.Type, "account", StringComparison.Ordinal));
+        _hasAccountField = accountField is not null;
+        _accountFieldName = accountField?.Name ?? string.Empty;
+
+        _fields = new Dictionary<string, string>();
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var field in _topicFields.Where(f => !string.Equals(f.Type, "account", StringComparison.Ordinal)))
+        {
+            _fields[field.Name] = PlaceholderResolver.Resolve(field.Default, now, Random.Shared);
+        }
+
+        _isOpen = true;
+        StateHasChanged();
+    }
+
+
+    private void OnAccountSelected(string fieldName, ChangeEventArgs e)
+    {
+        var customerId = e.Value?.ToString() ?? string.Empty;
+
+        if (string.IsNullOrEmpty(customerId))
+        {
+            _fields.Remove(fieldName);
+            return;
+        }
+
+        _fields[fieldName] = customerId;
+
+        var record = Monitor.Accounts.FirstOrDefault(
+            a => string.Equals(a.CustomerId, customerId, StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (record is not null)
+        {
+            foreach (var kv in record.Fields.Where(kv => !string.Equals(kv.Key, fieldName, StringComparison.Ordinal)))
+            {
+                _fields[kv.Key] = kv.Value;
+            }
+        }
+    }
+
+
+    private void UpdateField(string key, string value)
+    {
+        _fields[key] = value;
+    }
+
+
+    private async Task Submit()
+    {
+        _isOpen = false;
+        await OnSubmit.InvokeAsync(new ActionDialogResult(_topic, _sourceApp, new Dictionary<string, string>(_fields)));
+    }
+
+
+    private void Cancel()
+    {
+        _isOpen = false;
+    }
+}

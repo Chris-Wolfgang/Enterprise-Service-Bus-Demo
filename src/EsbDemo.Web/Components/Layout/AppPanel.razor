@@ -1,0 +1,80 @@
+@inject ConfigService Config
+@inject MonitorService Monitor
+
+@foreach (var app in Config.Apps.OrderBy(a => a.DisplayOrder))
+{
+    <div class="app-card">
+        <div class="app-header">
+            <span class="app-status-dot @(Monitor.IsOnline(app.Name) ? "online" : "offline")"></span>
+            <span class="app-name">@app.Name</span>
+            <button class="btn-toggle @(Monitor.IsOnline(app.Name) ? "btn-toggle-online" : "btn-toggle-offline")"
+                    @onclick="() => ToggleOnline(app.Name)">
+                @(Monitor.IsOnline(app.Name) ? "Online" : "Offline")
+            </button>
+        </div>
+
+        @if (!Monitor.IsOnline(app.Name) && Monitor.GetQueuedCount(app.Name) > 0)
+        {
+            <div class="queued-badge">@Monitor.GetQueuedCount(app.Name) queued</div>
+        }
+
+        @foreach (var topic in app.Publishes)
+        {
+            var topicLabel = Config.GetTopicLabel(topic);
+            var capturedTopic = topic;
+            var capturedApp = app.Name;
+            <button class="btn-action"
+                    disabled="@(!Monitor.IsOnline(app.Name))"
+                    @onclick="() => OpenDialog(capturedTopic, capturedApp)">
+                @topicLabel
+            </button>
+        }
+
+        @if (!app.Publishes.Any() && app.Subscribes.Any())
+        {
+            <div class="receive-only-label">Receive only</div>
+        }
+    </div>
+}
+
+<ActionDialog @ref="_dialog" OnSubmit="HandleDialogSubmit" />
+
+@code {
+    private ActionDialog? _dialog;
+
+    private void ToggleOnline(string appName)
+    {
+        Monitor.SetOnline(appName, !Monitor.IsOnline(appName));
+    }
+
+    private void OpenDialog(string topic, string sourceApp)
+    {
+        _dialog?.Open(topic, sourceApp);
+    }
+
+    private void HandleDialogSubmit(ActionDialogResult result)
+    {
+        var correlationId = GenerateCorrelationId(result.SourceApp, result.Topic, result.Fields);
+        Monitor.Publish(result.Topic, result.SourceApp, correlationId, result.Fields, isUserInitiated: true);
+    }
+
+
+    private static string GenerateCorrelationId(string sourceApp, string topic, Dictionary<string, string> fields)
+    {
+        // ERP directly publishing account.created uses the minted account number
+        if (string.Equals(sourceApp, "ERP", StringComparison.Ordinal) &&
+            string.Equals(topic, "account.created", StringComparison.Ordinal) &&
+            fields.TryGetValue("CustomerId", out var custId) &&
+            !string.IsNullOrEmpty(custId))
+        {
+            return custId;
+        }
+
+        return sourceApp switch
+        {
+            "CRM"       => Guid.NewGuid().ToString(),
+            "eCommerce" => Random.Shared.NextInt64(0, long.MaxValue).ToString(),
+            _           => Guid.NewGuid().ToString()
+        };
+    }
+}

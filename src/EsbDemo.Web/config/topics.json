@@ -1,0 +1,96 @@
+[
+  {
+    "topic": "account.create",
+    "label": "Create Customer",
+    "colorFamily": "blue",
+    "colorShade": "light",
+    "fields": [
+      { "name": "Name",  "type": "text", "default": "Acme Corp {##}" },
+      { "name": "Email", "type": "text", "default": "contact{##}@acme.com" },
+      { "name": "Phone", "type": "text", "default": "555-{####}" }
+    ]
+  },
+  {
+    "topic": "account.created",
+    "label": "Customer Created",
+    "colorFamily": "blue",
+    "colorShade": "dark",
+    "fields": [
+      { "name": "CustomerId", "type": "text", "default": "CUST{####}" },
+      { "name": "Name",       "type": "text", "default": "Acme Corp {##}" }
+    ]
+  },
+  {
+    "topic": "account.updated",
+    "label": "Update Customer",
+    "colorFamily": "indigo",
+    "colorShade": "dark",
+    "fields": [
+      { "name": "CustomerId", "type": "account", "default": "" },
+      { "name": "Name",       "type": "text",    "default": "" },
+      { "name": "Email",      "type": "text",    "default": "" },
+      { "name": "Phone",      "type": "text",    "default": "" }
+    ]
+  },
+  {
+    "topic": "account.deactivated",
+    "label": "Account Deactivated",
+    "colorFamily": "red",
+    "colorShade": "dark",
+    "fields": [
+      { "name": "CustomerId", "type": "account", "default": "" },
+      { "name": "Name",       "type": "text",    "default": "" }
+    ]
+  },
+  {
+    "topic": "account.activated",
+    "label": "Account Activated",
+    "colorFamily": "green",
+    "colorShade": "dark",
+    "fields": [
+      { "name": "CustomerId", "type": "account", "default": "" },
+      { "name": "Name",       "type": "text",    "default": "" }
+    ]
+  },
+  {
+    "topic": "order.place",
+    "label": "Place Order",
+    "colorFamily": "green",
+    "colorShade": "light",
+    "fields": [
+      { "name": "CustomerId", "type": "account", "default": "" },
+      { "name": "OrderRef",   "type": "text",    "default": "ORD-{####}" },
+      { "name": "Amount",     "type": "text",    "default": "$1,{##}0.00" }
+    ]
+  },
+  {
+    "topic": "order.placed",
+    "label": "Order Placed",
+    "colorFamily": "green",
+    "colorShade": "medium",
+    "fields": [
+      { "name": "OrderId",  "type": "text", "default": "ERP-{####}" },
+      { "name": "OrderRef", "type": "text", "default": "ORD-{####}" }
+    ]
+  },
+  {
+    "topic": "order.shipped",
+    "label": "Order Shipped",
+    "colorFamily": "green",
+    "colorShade": "dark",
+    "fields": [
+      { "name": "OrderId",        "type": "text", "default": "ERP-{####}" },
+      { "name": "TrackingNumber", "type": "text", "default": "1Z{####}{####}" }
+    ]
+  },
+  {
+    "topic": "inventory.update",
+    "label": "Update Inventory",
+    "colorFamily": "orange",
+    "colorShade": "light",
+    "fields": [
+      { "name": "SKU",      "type": "text", "default": "SKU-{####}" },
+      { "name": "Quantity", "type": "text", "default": "{##}" }
+    ]
+  }
+]
