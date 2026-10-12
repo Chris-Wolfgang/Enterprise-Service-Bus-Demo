@@ -48,7 +48,8 @@ public sealed record MonitorEntry
 
 
     /// <summary>
-    /// Gets a value indicating whether the row is styled as a queued delivery.
+    /// Gets a value indicating whether the message waited in an offline app's queue and was delivered
+    /// when the app came back online. The monitor styles these rows as queued deliveries.
     /// </summary>
     public bool IsQueued { get; init; }
 }

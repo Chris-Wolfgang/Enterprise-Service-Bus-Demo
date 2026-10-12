@@ -250,6 +250,22 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
+    public async Task SetOnline_marks_only_the_deliveries_that_waited_in_the_queue_as_queued()
+    {
+        var (sut, _) = await CreateAsync();
+        sut.SetOnline("ERP", online: false);
+        sut.Publish("account.updated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        sut.SetOnline("ERP", online: true);
+
+        Assert.True(Received(sut, "account.updated", "ERP")!.IsQueued);
+        Assert.False(Received(sut, "account.updated", "eCommerce")!.IsQueued);
+        Assert.False(Sent(sut, "account.updated")[0].IsQueued);
+    }
+
+
+
+    [Fact]
     public async Task SetOnline_when_a_queued_message_came_from_the_app_itself_does_not_call_its_handler()
     {
         var (sut, _) = await CreateAsync();
