@@ -1,5 +1,6 @@
 @inject ErpDbContext Db
 @inject ErpConnector Connector
+@inject TimeProvider Clock
 @implements IDisposable
 
 <div class="erp-container">
@@ -111,23 +112,30 @@
     private string _editCredit = "0.00";
     private string _newCustNum = "";
     private string _clock = "";
-    private Timer? _timer;
+    private PeriodicTimer? _timer;
 
     /// <summary>
     /// Loads the ERP customer master and subscribes to <see cref="ErpConnector.DataChanged"/> so the list reloads
     /// when a bus message changes the data. It also starts
-    /// the one-second timer that drives the terminal clock.
+    /// the one-second timer, on the injected <see cref="TimeProvider"/>, that drives the terminal clock.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
         _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
         _clock = BuildClock();
-        _timer = new Timer(_ =>
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
+        _ = RunClockAsync(_timer);
+        Connector.DataChanged += OnDataChanged;
+    }
+
+    // Ends when Dispose disposes the timer: WaitForNextTickAsync then returns false.
+    private async Task RunClockAsync(PeriodicTimer timer)
+    {
+        while (await timer.WaitForNextTickAsync())
         {
             _clock = BuildClock();
-            InvokeAsync(StateHasChanged);
-        }, null, 1000, 1000);
-        Connector.DataChanged += OnDataChanged;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     /// <summary>
@@ -146,10 +154,10 @@
             StateHasChanged();
         });
 
-    private static string BuildClock()
+    private string BuildClock()
     {
         // One reading for both fields, so the date and time never straddle a second boundary.
-        var now = DateTimeOffset.Now;
+        var now = Clock.GetLocalNow();
         return $"  DATE: {now:MM/dd/yy}   TIME: {now:HH:mm:ss}   TERMINAL: ERP-01";
     }
 
@@ -212,7 +220,11 @@
 
     private void StartNew()
     {
+        // The ERP auto-response also mints CUSTnnnn numbers, so skip any that are already taken.
         var nextNum = _customers.Count + 1;
+        while (_customers.Exists(c => c.CustNum == $"CUST{nextNum:D4}"))
+            nextNum++;
+
         _newCustNum  = $"CUST{nextNum:D4}";
         _editName    = "";
         _editEmail   = "";
