@@ -38,6 +38,7 @@ public abstract class ComponentTestBase : BunitContext, IAsyncLifetime
         Monitor = new MonitorService(Config, Time);
 
         var suffix = Guid.NewGuid().ToString("N");
+        Services.AddSingleton<TimeProvider>(Time);
         Services.AddSingleton(Config);
         Services.AddSingleton(Monitor);
         Services.AddDbContext<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix));
