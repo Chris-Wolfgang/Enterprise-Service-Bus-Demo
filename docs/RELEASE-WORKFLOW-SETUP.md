@@ -1,5 +1,12 @@
 # Release Workflow Setup Guide
 
+> **Read this first.** This is the fleet repo-template guide for NuGet **libraries**. This
+> repository is an application and its `release.yaml` cannot ship it yet (see issue #169). Where
+> the guide differs from the workflows here:
+> - The coverage gates are 95% line coverage for `src/` and 100% for `tests/`, not 90%.
+> - `release.yaml` publishes with NuGet **trusted publishing (OIDC)** (`id-token: write`,
+>   `NuGet/login`); no `NUGET_API_KEY` secret is needed, so skip the secret steps below.
+
 This guide explains how to configure a repository to use the standard `release.yaml` workflow. The same checklist applies whether you are bootstrapping a new repo from `repo-template` or auditing an existing one.
 
 ## Overview
