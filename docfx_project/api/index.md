@@ -1,6 +1,6 @@
 # API Reference
 
-Welcome to the Wolfgang.Demo.EnterpriseServiceBus API documentation.
+Welcome to the Enterprise Service Bus Demo API documentation (`EsbDemo.Core` and `EsbDemo.Web`).
 
 This section contains the complete API reference, automatically generated from XML documentation comments in the source code.
 

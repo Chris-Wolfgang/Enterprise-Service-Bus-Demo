@@ -2,33 +2,29 @@
 _layout: landing
 ---
 
-# Wolfgang.Demo.EnterpriseServiceBus Documentation
+# Enterprise Service Bus Demo Documentation
 
-Welcome to the Wolfgang.Demo.EnterpriseServiceBus documentation. This site contains comprehensive guides, API reference, and examples to help you get started.
+An interactive demo of how an ESB can help your organization connect various systems in realtime.
 
 ## Quick Links
 
-- [Getting Started](docs/getting-started.md) - Learn the basics
-- [API Reference](xref:Wolfgang.Demo.EnterpriseServiceBus) - Complete API documentation
+- [Getting Started](docs/getting-started.md) - Run the demo and change its configuration
+- [API Reference](api/index.md) - Generated from the source code's XML comments
 - [GitHub Repository](https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo) - View source code
 
-## About Wolfgang.Demo.EnterpriseServiceBus
+## About the demo
 
-An interactive demo of how an ESB can help your organization connect various systems in realtime
+A Blazor Server application in which six simulated systems (CRM, ERP, eCommerce, WMS, Customer Portal and Data Warehouse) exchange messages over an in-memory bus. A change made in one system is published on a topic, every subscribing system updates its own data, systems can be taken offline to see messages queue, and a monitor logs every message.
 
-## Installation
-
-```bash
-dotnet add package Wolfgang.Demo.EnterpriseServiceBus
-```
+This is an application, not a library: nothing is published as a NuGet package.
 
 ## Documentation Sections
 
 ### 📖 [Documentation](docs/getting-started.md)
-Step-by-step guides and tutorials to help you use Wolfgang.Demo.EnterpriseServiceBus effectively.
+How to run the demo and how the apps and topics are configured.
 
-### 📚 [API Reference](xref:Wolfgang.Demo.EnterpriseServiceBus)
-Complete API documentation automatically generated from source code XML comments.
+### 📚 [API Reference](api/index.md)
+API documentation for `EsbDemo.Core` and `EsbDemo.Web`, generated from source code XML comments.
 
 ## Additional Resources
 

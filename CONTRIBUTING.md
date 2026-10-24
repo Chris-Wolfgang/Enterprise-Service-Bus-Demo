@@ -157,7 +157,7 @@ var now = DateTimeOffset.UtcNow;
 ## Build and Test Instructions
 
 ### Prerequisites
-- Latest .NET SDK recommended (the CI matrix tests .NET 5.0-10.0 and .NET Framework 4.6.2-4.8.1; the SDK you actually need depends on your project's target frameworks. The template itself contains no csproj.)
+- .NET 10 SDK (the web app targets `net10.0`; only `EsbDemo.Core.Tests.Unit` runs on the older .NET 5.0-9.0, .NET Core 3.1 and .NET Framework 4.6.2-4.8.1 TFMs, when those runtimes are installed)
 - PowerShell Core (optional, for formatting scripts)
 
 ### Build the Project

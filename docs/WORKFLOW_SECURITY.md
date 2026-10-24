@@ -1,5 +1,15 @@
 # Workflow Security
 
+> **Out of date for this repository.** This guide was copied from the fleet repo-template and
+> describes an older design. What the workflows here actually do:
+> - `pr.yaml` runs on `pull_request` (and on `push` to `main`), not `pull_request_target`. It
+>   fetches the trusted gate configuration from `main` itself, and gate integrity for protected
+>   files is enforced by the separate `protected-files.yaml` (`pull_request_target`) workflow.
+> - Every third-party action is pinned to a full commit SHA (the `@v6`-style examples below are
+>   illustrative only).
+>
+> Read the comments at the top of `.github/workflows/pr.yaml` for the current model.
+
 ## Overview
 
 This document describes the security measures implemented in the GitHub Actions workflows for this repository, particularly focusing on the PR validation workflow (`.github/workflows/pr.yaml`).
