@@ -1,6 +1,7 @@
 using EsbDemo.Core.Config;
 using EsbDemo.Core.Services;
 using EsbDemo.Web.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EsbDemo.Web.Services;
 
@@ -10,12 +11,15 @@ namespace EsbDemo.Web.Services;
 /// </summary>
 /// <remarks>
 /// The service is a singleton shared by every circuit and is safe to call from any thread.
-/// <see cref="Entries"/> and <see cref="Accounts"/> return snapshots.
+/// <see cref="Entries"/> and <see cref="Accounts"/> return snapshots. Connector handlers run
+/// after the bus lock is released, and a handler, auto-response or timeout task that faults is
+/// logged rather than lost.
 /// </remarks>
-public sealed class MonitorService
+public sealed partial class MonitorService
 {
     private readonly ConfigService _config;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<MonitorService> _logger;
 
     // Guards every collection below. Blazor circuits call in on their own threads, and the delayed
     // auto-response and timeout tasks call in from the thread pool, so all access is serialized.
@@ -83,7 +87,21 @@ public sealed class MonitorService
     /// </summary>
     /// <param name="config">The app and topic configuration, which must already be loaded.</param>
     public MonitorService(ConfigService config)
-        : this(config, TimeProvider.System)
+        : this(config, TimeProvider.System, NullLogger<MonitorService>.Instance)
+    {
+    }
+
+
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MonitorService"/> class that logs faults from
+    /// connector handlers and background tasks, and sets every configured app to its
+    /// <see cref="AppConfig.DefaultOnline"/> status.
+    /// </summary>
+    /// <param name="config">The app and topic configuration, which must already be loaded.</param>
+    /// <param name="logger">Receives faults from connector handlers, auto-responses and timeouts.</param>
+    public MonitorService(ConfigService config, ILogger<MonitorService> logger)
+        : this(config, TimeProvider.System, logger)
     {
     }
 
@@ -97,9 +115,23 @@ public sealed class MonitorService
     /// <param name="config">The app and topic configuration, which must already be loaded.</param>
     /// <param name="timeProvider">The clock to use.</param>
     internal MonitorService(ConfigService config, TimeProvider timeProvider)
+        : this(config, timeProvider, NullLogger<MonitorService>.Instance)
+    {
+    }
+
+
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MonitorService"/> class with a clock and a logger.
+    /// </summary>
+    /// <param name="config">The app and topic configuration, which must already be loaded.</param>
+    /// <param name="timeProvider">The clock to use.</param>
+    /// <param name="logger">Receives faults from connector handlers, auto-responses and timeouts.</param>
+    internal MonitorService(ConfigService config, TimeProvider timeProvider, ILogger<MonitorService> logger)
     {
         _config = config;
         _timeProvider = timeProvider;
+        _logger = logger;
         InitializeAppStatus();
     }
 
@@ -155,6 +187,8 @@ public sealed class MonitorService
     /// <param name="online"><see langword="true"/> to take the app online; <see langword="false"/> to take it offline.</param>
     public void SetOnline(string appName, bool online)
     {
+        var handlerCalls = new List<HandlerCall>();
+
         lock (_gate)
         {
             _onlineStatus[appName] = online;
@@ -167,11 +201,12 @@ public sealed class MonitorService
 
                 while (queue.TryDequeue(out var msg))
                 {
-                    FlushQueuedMessage(app, appName, msg);
+                    FlushQueuedMessage(app, appName, msg, handlerCalls);
                 }
             }
         }
 
+        InvokeHandlers(handlerCalls);
         NotifyChanged();
     }
 
@@ -189,7 +224,10 @@ public sealed class MonitorService
             _entries.Clear();
 
             foreach (var cts in _pendingCreateCts.Values)
+            {
                 cts.Cancel();
+                cts.Dispose();
+            }
 
             _pendingCreateCts.Clear();
             _accountsByCorrelation.Clear();
@@ -229,6 +267,8 @@ public sealed class MonitorService
     {
         if (fields is null) throw new ArgumentNullException(nameof(fields));
 
+        var handlerCalls = new List<HandlerCall>();
+
         lock (_gate)
         {
             var now = _timeProvider.GetUtcNow();
@@ -260,11 +300,12 @@ public sealed class MonitorService
             {
                 DeliverToSubscriber(
                     app, topic, sourceApp, correlationId, fields,
-                    summary, cssClass, now, isUserInitiated, oldAccountFields
+                    summary, cssClass, now, isUserInitiated, handlerCalls, oldAccountFields
                 );
             }
         }
 
+        InvokeHandlers(handlerCalls);
         NotifyChanged();
     }
 
@@ -281,9 +322,16 @@ public sealed class MonitorService
         foreach (var kv in fields) record.Fields[kv.Key] = kv.Value;
         _accountsByCorrelation[correlationId] = record;
 
+        // A repeated correlation ID replaces the earlier wait; cancel it so it cannot fire for the new record.
+        if (_pendingCreateCts.Remove(correlationId, out var previous))
+        {
+            previous.Cancel();
+            previous.Dispose();
+        }
+
         var cts = new CancellationTokenSource();
         _pendingCreateCts[correlationId] = cts;
-        _ = WatchAccountCreateTimeoutAsync(correlationId, cts.Token);
+        Observe(WatchAccountCreateTimeoutAsync(correlationId, cts.Token), "account.create timeout");
     }
 
 
@@ -300,6 +348,7 @@ public sealed class MonitorService
             _pendingCreateCts.TryGetValue(correlationId, out var cts))
         {
             cts.Cancel();
+            cts.Dispose();
             _pendingCreateCts.Remove(correlationId);
         }
 
@@ -380,6 +429,7 @@ public sealed class MonitorService
         string cssClass,
         DateTimeOffset now,
         bool isUserInitiated,
+        List<HandlerCall> handlerCalls,
         Dictionary<string, string>? oldAccountFields = null)
     {
         var isSelfOrigin = string.Equals(app.Name, sourceApp, StringComparison.OrdinalIgnoreCase);
@@ -406,7 +456,7 @@ public sealed class MonitorService
                 TriggerAutoResponse(app, topic, correlationId, fields, isUserInitiated, sourceApp);
 
                 if (_handlers.TryGetValue(app.Name, out var handler))
-                    _ = handler(topic, new Dictionary<string, string>(fields));
+                    handlerCalls.Add(new HandlerCall(app.Name, handler, topic, new Dictionary<string, string>(fields)));
             }
         }
         else
@@ -427,7 +477,7 @@ public sealed class MonitorService
     }
 
 
-    private void FlushQueuedMessage(AppConfig? app, string appName, QueuedMessage msg)
+    private void FlushQueuedMessage(AppConfig? app, string appName, QueuedMessage msg, List<HandlerCall> handlerCalls)
     {
         var cssClass = _config.GetTopicCssClass(msg.Topic);
         var summary = BuildReceiverSummary(appName, msg.Topic, msg.Fields) ?? BuildSummary(msg.Fields);
@@ -452,7 +502,7 @@ public sealed class MonitorService
         if (!string.Equals(appName, msg.SourceApp, StringComparison.OrdinalIgnoreCase) &&
             _handlers.TryGetValue(appName, out var handler))
         {
-            _ = handler(msg.Topic, new Dictionary<string, string>(msg.Fields));
+            handlerCalls.Add(new HandlerCall(appName, handler, msg.Topic, new Dictionary<string, string>(msg.Fields)));
         }
     }
 
@@ -474,7 +524,11 @@ public sealed class MonitorService
         if (autoResponse is not null &&
             !string.Equals(autoResponse.Publish, topic, StringComparison.Ordinal))
         {
-            _ = PublishAutoResponseAsync(autoResponse.Publish, app.Name, correlationId, fields, originalSourceApp);
+            Observe
+            (
+                PublishAutoResponseAsync(autoResponse.Publish, app.Name, correlationId, fields, originalSourceApp),
+                $"{app.Name} auto-response {autoResponse.Publish}"
+            );
         }
     }
 
@@ -594,6 +648,49 @@ public sealed class MonitorService
     }
 
 
+    // Called after the bus lock is released, so a connector's synchronous work (scope creation, the
+    // first EF call) never runs under the lock, and one handler's fault cannot stop the others.
+    private void InvokeHandlers(List<HandlerCall> handlerCalls)
+    {
+        foreach (var call in handlerCalls)
+            Observe(InvokeHandlerAsync(call), $"{call.AppName} handler for {call.Topic}");
+    }
+
+
+
+    // The async wrapper is the point: it turns a handler's synchronous throw into a faulted task, so
+    // returning the handler's task directly (what AsyncFixer01 suggests) would let the throw escape.
+#pragma warning disable AsyncFixer01
+    private static async Task InvokeHandlerAsync(HandlerCall call) =>
+        await call.Handler(call.Topic, call.Fields).ConfigureAwait(false);
+#pragma warning restore AsyncFixer01
+
+
+
+    private void Observe(Task task, string operation) =>
+        _ = ObserveAsync(task, operation);
+
+
+
+    private async Task ObserveAsync(Task task, string operation)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogBackgroundFault(_logger, ex, operation);
+        }
+    }
+
+
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Bus background work failed: {Operation}")]
+    private static partial void LogBackgroundFault(ILogger logger, Exception exception, string operation);
+
+
+
     private void InitializeAppStatus()
     {
         foreach (var app in _config.Apps)
@@ -683,4 +780,14 @@ public sealed class MonitorService
 
     private static string BuildSummary(Dictionary<string, string> fields) =>
         string.Join(", ", fields.Select(kv => $"{kv.Key}: {kv.Value}"));
+
+
+
+    private readonly record struct HandlerCall
+    (
+        string AppName,
+        Func<string, Dictionary<string, string>, Task> Handler,
+        string Topic,
+        Dictionary<string, string> Fields
+    );
 }
