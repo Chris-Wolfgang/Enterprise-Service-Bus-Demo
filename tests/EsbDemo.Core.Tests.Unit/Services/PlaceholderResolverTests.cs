@@ -50,9 +50,9 @@ public sealed class PlaceholderResolverTests
     [Fact]
     public void Resolve_when_template_has_date_and_time_placeholders_formats_now()
     {
-        var expected = Now.ToString("yyyy-MM-dd", CultureInfo.CurrentCulture)
+        var expected = Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
             + " "
-            + Now.ToString("HH:mm", CultureInfo.CurrentCulture);
+            + Now.ToString("HH:mm", CultureInfo.InvariantCulture);
 
         var actual = PlaceholderResolver.Resolve("{yyyy-MM-dd} {hh:mm}", Now, new Random(1));
 
@@ -68,7 +68,7 @@ public sealed class PlaceholderResolverTests
 
         var actual = PlaceholderResolver.Resolve("CUST{####}", Now, new Random(42));
 
-        Assert.Equal("CUST" + expected.ToString(CultureInfo.CurrentCulture), actual);
+        Assert.Equal("CUST" + expected.ToString(CultureInfo.InvariantCulture), actual);
     }
 
 
@@ -84,7 +84,7 @@ public sealed class PlaceholderResolverTests
 
         var actual = PlaceholderResolver.Resolve("Acme Corp {##}", Now, new Random(7));
 
-        Assert.Equal("Acme Corp " + expected.ToString(CultureInfo.CurrentCulture), actual);
+        Assert.Equal("Acme Corp " + expected.ToString(CultureInfo.InvariantCulture), actual);
         Assert.InRange(expected, 10, 98);
     }
 
@@ -112,8 +112,28 @@ public sealed class PlaceholderResolverTests
 
         Assert.Equal
         (
-            expectedFour.ToString(CultureInfo.CurrentCulture) + "/" + expectedTwo.ToString(CultureInfo.CurrentCulture),
+            expectedFour.ToString(CultureInfo.InvariantCulture) + "/" + expectedTwo.ToString(CultureInfo.InvariantCulture),
             actual
         );
+    }
+
+
+    [Fact]
+    public void Resolve_when_current_culture_uses_a_non_Gregorian_calendar_still_formats_a_Gregorian_date()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            // th-TH defaults to the Thai Buddhist calendar (2026 renders as 2569).
+            CultureInfo.CurrentCulture = new CultureInfo("th-TH");
+
+            var actual = PlaceholderResolver.Resolve("{yyyy-MM-dd} {hh:mm}", Now, new Random(1));
+
+            Assert.Equal("2026-03-07 14:05", actual);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 }
