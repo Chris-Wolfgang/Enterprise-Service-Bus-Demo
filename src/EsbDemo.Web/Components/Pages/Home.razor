@@ -18,8 +18,9 @@
 <div class="tab-content">
     @if (_activeTab == "monitor")
     {
+        var entries = Monitor.Entries;
         <div class="monitor-container" id="monitor-container">
-            @if (!Monitor.Entries.Any())
+            @if (entries.Count == 0)
             {
                 <div class="monitor-empty">
                     <p>No messages yet. Use the application panel on the left to trigger actions.</p>
@@ -39,7 +40,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var entry in Monitor.Entries)
+                        @foreach (var entry in entries)
                         {
                             var isSend = entry.Direction == "→ SEND";
                             var rowClass = $"{(isSend ? "row-send" : "row-recv")} {(entry.IsQueued ? "queued" : "")}".Trim();
