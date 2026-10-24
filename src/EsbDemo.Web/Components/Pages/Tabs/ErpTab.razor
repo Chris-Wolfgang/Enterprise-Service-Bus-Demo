@@ -1,3 +1,4 @@
+@using System.Globalization
 @inject ErpDbContext Db
 @inject ErpConnector Connector
 @implements IDisposable
@@ -236,7 +237,7 @@
             Phone      = _editPhone,
             CustType   = string.IsNullOrWhiteSpace(_editType) ? "GEN" : _editType.ToUpperInvariant(),
             Terms      = string.IsNullOrWhiteSpace(_editTerms) ? null : _editTerms.ToUpperInvariant(),
-            CreditLim  = decimal.TryParse(_editCredit, out var cr) ? cr : 0m,
+            CreditLim  = decimal.TryParse(_editCredit, NumberStyles.Number, CultureInfo.InvariantCulture, out var cr) ? cr : 0m,
             ClosedDate = null,
             AddDate    = DateTime.UtcNow,
             ModDate    = DateTime.UtcNow
