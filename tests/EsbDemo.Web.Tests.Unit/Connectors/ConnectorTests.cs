@@ -302,7 +302,7 @@ public sealed class ConnectorTests
         h.Crm.DataChanged += (_, _) => saved.Add("CRM");
 
         h.Monitor.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme Corp 7"), ("Email", "a7@acme.com")), isUserInitiated: true);
-        h.Time.Advance(TimeSpan.FromMilliseconds(500));
+        h.Time.Advance(EsbDemo.Web.Services.MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => saved.Contains("CRM"));
 
         Assert.Equal(new[] { "ERP", "CRM" }, saved);
