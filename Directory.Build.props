@@ -71,7 +71,7 @@
     </PackageReference>
 
     <!-- Meziantou - Comprehensive code quality -->
-    <PackageReference Include="Meziantou.Analyzer" Version="3.0.303">
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.317">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -140,7 +140,7 @@
          file, so check https://www.nuget.org/packages/Microsoft.SourceLink.GitHub
          when a NuGetAudit advisory names Microsoft.Build.Tasks.Git
          (CVE-2026-62900 covered 8.0.0 and 10.0.300-10.0.301). -->
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.402">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.403">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
