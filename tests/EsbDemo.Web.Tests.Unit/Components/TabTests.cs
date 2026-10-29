@@ -185,6 +185,7 @@ public sealed class TabTests : ComponentTestBase
 
         var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0006"));
         Assert.Equal(("Hooli", "GEN", (string?)null, 0m), (saved.Name, saved.CustType, saved.Terms, saved.CreditLim));
+        Assert.Equal(((string?)null, (string?)null), (saved.Email, saved.Phone));
         Assert.Contains("6 RECORDS", cut.Find(".erp-trow-statusbar").TextContent, StringComparison.Ordinal);
         var sent = Assert.Single(SentBy("ERP"));
         Assert.Equal(("account.created", "CUST0006"), (sent.Topic, sent.CorrelationId));
@@ -199,6 +200,8 @@ public sealed class TabTests : ComponentTestBase
         cut.Find(".erp-roster-new").Click();
 
         cut.FindAll(".erp-input")[0].Input("Pied Piper");
+        cut.FindAll(".erp-input")[1].Input("ops@piedpiper.example");
+        cut.FindAll(".erp-input")[2].Input("555-0199");
         cut.FindAll(".erp-input")[3].Input("retl");
         cut.FindAll(".erp-input")[4].Input("net60");
         cut.FindAll(".erp-input")[5].Input("2500.50");
@@ -206,6 +209,7 @@ public sealed class TabTests : ComponentTestBase
 
         var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0006"));
         Assert.Equal(("RETL", "NET60", 2500.50m), (saved.CustType, saved.Terms, saved.CreditLim));
+        Assert.Equal(("ops@piedpiper.example", "555-0199"), (saved.Email, saved.Phone));
     }
 
 

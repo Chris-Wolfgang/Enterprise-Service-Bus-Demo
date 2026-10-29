@@ -20,6 +20,8 @@ public sealed class CustMast
     [MaxLength(8)]
     public string CustNum { get; set; } = string.Empty;
 
+
+
     /// <summary>
     /// Gets or sets the customer name.
     /// </summary>
@@ -27,11 +29,15 @@ public sealed class CustMast
     [MaxLength(30)]
     public string Name { get; set; } = string.Empty;
 
+
+
     /// <summary>
     /// Gets or sets the customer's email address.
     /// </summary>
     [MaxLength(60)]
     public string? Email { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets the customer's phone number.
@@ -39,14 +45,20 @@ public sealed class CustMast
     [MaxLength(15)]
     public string? Phone { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets the customer type code. Defaults to <c>GEN</c>.
     /// </summary>
     [MaxLength(4)]
     public string CustType { get; set; } = "GEN";
 
+
+
     /// <summary>Date the account was closed. Null = active; any value = inactive.</summary>
     public DateTime? ClosedDate { get; set; }
+
+
 
     /// <summary>
     /// Gets a value indicating whether the account is open, that is, <see cref="ClosedDate"/> is <see langword="null"/>. Not stored.
@@ -54,11 +66,15 @@ public sealed class CustMast
     [NotMapped]
     public bool IsActive => ClosedDate is null;
 
+
+
     /// <summary>
     /// Gets or sets the payment terms code.
     /// </summary>
     [MaxLength(6)]
     public string? Terms { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets the credit limit.
@@ -66,16 +82,22 @@ public sealed class CustMast
     [Column(TypeName = "decimal(12,2)")]
     public decimal CreditLim { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets the code of the assigned sales representative.
     /// </summary>
     [MaxLength(4)]
     public string? SalesRep { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets when the row was added, in UTC.
     /// </summary>
     public DateTime AddDate { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets when the row was last modified, in UTC.

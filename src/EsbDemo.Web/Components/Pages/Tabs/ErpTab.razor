@@ -29,8 +29,8 @@
             <div class="erp-trow"><span class="erp-lbl">  CUST# ..... </span><span class="erp-val">@_newCustNum</span></div>
             <div class="erp-trow">&nbsp;</div>
             <div class="erp-trow"><span class="erp-lbl">  NAME ...... </span><input class="erp-input" @bind="_editName" @bind:event="oninput" maxlength="30" /></div>
-            <div class="erp-trow"><span class="erp-lbl">  EMAIL ..... </span><input class="erp-input erp-input-wide" @bind="_editEmail" @bind:event="oninput" maxlength="50" /></div>
-            <div class="erp-trow"><span class="erp-lbl">  PHONE ..... </span><input class="erp-input" @bind="_editPhone" @bind:event="oninput" maxlength="20" /></div>
+            <div class="erp-trow"><span class="erp-lbl">  EMAIL ..... </span><input class="erp-input erp-input-wide" @bind="_editEmail" @bind:event="oninput" maxlength="60" /></div>
+            <div class="erp-trow"><span class="erp-lbl">  PHONE ..... </span><input class="erp-input" @bind="_editPhone" @bind:event="oninput" maxlength="15" /></div>
             <div class="erp-trow">&nbsp;</div>
             <div class="erp-trow"><span class="erp-lbl">  TYPE ...... </span><input class="erp-input" @bind="_editType" @bind:event="oninput" maxlength="4" /><span class="erp-trow-dim">   (RETL/WHSL/GEN/GOV)</span></div>
             <div class="erp-trow"><span class="erp-lbl">  TERMS ..... </span><input class="erp-input" @bind="_editTerms" @bind:event="oninput" maxlength="6" /><span class="erp-trow-dim">   (NET30/NET60/COD…)</span></div>
@@ -53,8 +53,8 @@
                 <div class="erp-trow"><span class="erp-lbl">  CLOSED DATE  </span><span class="@(isActive ? "erp-trow-dim" : "erp-val-red")">@(isActive ? "(open)" : closedStr)</span></div>
                 <div class="erp-trow">&nbsp;</div>
                 <div class="erp-trow"><span class="erp-lbl">  NAME ...... </span>@if (_mode == ErpMode.Edit){<input class="erp-input" @bind="_editName" @bind:event="oninput" maxlength="30" />}else{<span class="erp-val">@cust.Name</span>}</div>
-                <div class="erp-trow"><span class="erp-lbl">  EMAIL ..... </span>@if (_mode == ErpMode.Edit){<input class="erp-input erp-input-wide" @bind="_editEmail" @bind:event="oninput" maxlength="50" />}else{<span class="erp-val">@(cust.Email ?? "N/A")</span>}</div>
-                <div class="erp-trow"><span class="erp-lbl">  PHONE ..... </span>@if (_mode == ErpMode.Edit){<input class="erp-input" @bind="_editPhone" @bind:event="oninput" maxlength="20" />}else{<span class="erp-val">@(cust.Phone ?? "N/A")</span>}</div>
+                <div class="erp-trow"><span class="erp-lbl">  EMAIL ..... </span>@if (_mode == ErpMode.Edit){<input class="erp-input erp-input-wide" @bind="_editEmail" @bind:event="oninput" maxlength="60" />}else{<span class="erp-val">@(cust.Email ?? "N/A")</span>}</div>
+                <div class="erp-trow"><span class="erp-lbl">  PHONE ..... </span>@if (_mode == ErpMode.Edit){<input class="erp-input" @bind="_editPhone" @bind:event="oninput" maxlength="15" />}else{<span class="erp-val">@(cust.Phone ?? "N/A")</span>}</div>
                 <div class="erp-trow">&nbsp;</div>
                 <div class="erp-trow"><span class="erp-lbl">  TYPE ...... </span><span class="erp-val">@cust.CustType.PadRight(12)</span><span class="erp-lbl">TERMS: </span><span class="erp-val">@(cust.Terms ?? "—")</span></div>
                 <div class="erp-trow"><span class="erp-lbl">  CREDIT LIM  </span><span class="erp-val-yellow">@cust.CreditLim.ToString("N2")</span></div>
@@ -232,8 +232,8 @@
         {
             CustNum    = _newCustNum,
             Name       = _editName,
-            Email      = _editEmail,
-            Phone      = _editPhone,
+            Email      = string.IsNullOrWhiteSpace(_editEmail) ? null : _editEmail,
+            Phone      = string.IsNullOrWhiteSpace(_editPhone) ? null : _editPhone,
             CustType   = string.IsNullOrWhiteSpace(_editType) ? "GEN" : _editType.ToUpperInvariant(),
             Terms      = string.IsNullOrWhiteSpace(_editTerms) ? null : _editTerms.ToUpperInvariant(),
             CreditLim  = decimal.TryParse(_editCredit, out var cr) ? cr : 0m,
