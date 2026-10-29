@@ -56,7 +56,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task CrmConnector_PublishAccountUpdated_maps_CRM_fields_to_the_canonical_names()
+    public async Task CrmConnector_PublishAccountUpdated_when_called_maps_CRM_fields_to_the_canonical_names()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var acct = new CrmAccount { AccountId = WellKnown.Accounts.AcmeId, AccountNumber = "CUST0001", Name = "Acme", EMailAddress1 = "a@acme.com", Telephone1 = "555-1" };
@@ -99,7 +99,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task ErpConnector_publish_methods_send_the_ERP_customer_under_its_customer_number()
+    public async Task ErpConnector_publish_methods_when_called_send_the_ERP_customer_under_its_customer_number()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var cust = new CustMast { CustNum = "CUST0001", Name = "Acme" };
@@ -118,7 +118,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task ECommerce_and_Portal_PublishAccountUpdated_send_the_customer_under_its_customer_number()
+    public async Task ECommerce_and_Portal_PublishAccountUpdated_when_called_send_the_customer_under_its_customer_number()
     {
         using var h = await ConnectorHarness.CreateAsync();
 
@@ -132,7 +132,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task Inbound_account_updated_changes_the_customer_in_every_subscribing_system()
+    public async Task Inbound_account_updated_when_the_customer_is_known_changes_it_in_every_subscribing_system()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = new List<string>();
@@ -166,7 +166,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task Inbound_account_deactivated_then_activated_toggles_every_systems_status()
+    public async Task Inbound_account_deactivated_then_activated_when_the_customer_is_known_toggles_every_systems_status()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
@@ -198,7 +198,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task Inbound_account_created_adds_a_new_customer_to_every_receiving_system_and_ignores_known_ones()
+    public async Task Inbound_account_created_when_the_customer_is_new_adds_it_to_every_receiving_system_and_ignores_known_ones()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
@@ -222,7 +222,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task Inbound_account_updated_for_an_unknown_customer_is_created_only_by_the_CRM()
+    public async Task Inbound_account_updated_when_the_customer_is_unknown_is_created_only_by_the_CRM()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var crmChanged = 0;
@@ -245,7 +245,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task Inbound_status_change_for_an_unknown_customer_changes_nothing()
+    public async Task Inbound_status_change_when_the_customer_is_unknown_changes_nothing()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
@@ -267,7 +267,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task Inbound_message_without_a_customer_id_or_with_an_unhandled_topic_changes_nothing()
+    public async Task Inbound_message_when_it_has_no_customer_id_or_an_unhandled_topic_changes_nothing()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var changed = 0;
@@ -291,7 +291,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task ERP_auto_response_saves_the_minted_customer_before_the_other_systems_receive_it()
+    public async Task ERP_auto_response_when_an_account_is_created_saves_the_minted_customer_before_the_other_systems_receive_it()
     {
         using var h = await ConnectorHarness.CreateAsync();
 
@@ -314,7 +314,7 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task Seeded_databases_hold_the_five_well_known_customers()
+    public async Task Seeded_databases_when_created_hold_the_five_well_known_customers()
     {
         using var h = await ConnectorHarness.CreateAsync();
 

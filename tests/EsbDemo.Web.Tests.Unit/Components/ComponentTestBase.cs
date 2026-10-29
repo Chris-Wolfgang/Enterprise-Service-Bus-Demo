@@ -34,7 +34,7 @@ public abstract class ComponentTestBase : BunitContext, IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        Config = await TestConfig.LoadRealAsync();
+        Config = await ShippedConfig.LoadAsync();
         Monitor = new MonitorService(Config, Time);
 
         var suffix = Guid.NewGuid().ToString("N");

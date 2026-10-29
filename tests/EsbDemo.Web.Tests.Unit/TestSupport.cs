@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using EsbDemo.Web.Connectors;
 using EsbDemo.Web.Data.Crm;
 using EsbDemo.Web.Data.CustomerPortal;
@@ -7,59 +6,12 @@ using EsbDemo.Web.Data.ECommerce;
 using EsbDemo.Web.Data.Erp;
 using EsbDemo.Web.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EsbDemo.Web.Tests.Unit;
 
-/// <summary>A host environment whose content root is a chosen folder.</summary>
-[ExcludeFromCodeCoverage]
-internal sealed class FakeWebHostEnvironment : IWebHostEnvironment
-{
-    public FakeWebHostEnvironment(string contentRootPath)
-    {
-        ContentRootPath = contentRootPath;
-    }
-
-
-
-    public string ContentRootPath { get; set; }
-
-
-
-    public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-
-
-
-    public string ApplicationName { get; set; } = "EsbDemo.Web";
-
-
-
-    public string EnvironmentName { get; set; } = "Development";
-
-
-
-    public string WebRootPath { get; set; } = string.Empty;
-
-
-
-    public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
-}
-
-
-
 internal static class TestConfig
 {
-    /// <summary>Loads the app's real config/apps.json and config/topics.json, copied to the test output.</summary>
-    public static async Task<ConfigService> LoadRealAsync()
-    {
-        var config = new ConfigService(new FakeWebHostEnvironment(AppContext.BaseDirectory));
-        await config.LoadAsync();
-        return config;
-    }
-
-
-
     /// <summary>Writes the given JSON as config/apps.json and config/topics.json in a new folder and loads it.</summary>
     public static async Task<ConfigService> LoadAsync(string appsJson, string topicsJson)
     {
@@ -171,7 +123,7 @@ internal sealed class ConnectorHarness : IDisposable
         }
 
         var time = new FakeTimeProvider();
-        var monitor = new MonitorService(await TestConfig.LoadRealAsync(), time);
+        var monitor = new MonitorService(await ShippedConfig.LoadAsync(), time);
         return new ConnectorHarness(services, monitor, time);
     }
 

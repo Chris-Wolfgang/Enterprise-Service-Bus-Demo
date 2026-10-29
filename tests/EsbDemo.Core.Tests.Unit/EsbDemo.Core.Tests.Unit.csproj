@@ -16,6 +16,13 @@
 
 
 
+	<!-- xunit.runner.visualstudio differs per slot on purpose (#172): each framework keeps the runner
+	     version known to discover and run its tests, with exact pins / caps where a newer runner drops it.
+	       net462, net47, net471 ......... [2.8.2] (exact)
+	       netcoreapp3.1, net5.0 ......... 2.4.5, capped below 2.5.0
+	       net6.0, net7.0 ................ [3.0.2] (exact)
+	       net472-net481, net8.0-net10.0 . 3.1.5
+	     Change a slot only after running that framework's tests with the new runner. -->
 	<!-- .NET Framework 4.6.2 -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net462'">
 		<PackageReference Include="coverlet.collector" Version="10.1.0">

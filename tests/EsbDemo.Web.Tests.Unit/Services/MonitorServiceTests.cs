@@ -18,7 +18,7 @@ public sealed class MonitorServiceTests
     private static async Task<(MonitorService Sut, FakeTimeProvider Time)> CreateAsync()
     {
         var time = new FakeTimeProvider();
-        return (new MonitorService(await TestConfig.LoadRealAsync(), time), time);
+        return (new MonitorService(await ShippedConfig.LoadAsync(), time), time);
     }
 
 
@@ -39,7 +39,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public void MonitorService_public_constructor_uses_the_system_clock_and_the_mock_bus()
+    public void MonitorService_public_constructor_when_called_uses_the_system_clock_and_the_mock_bus()
     {
         var sut = new MonitorService(new ConfigService(new FakeWebHostEnvironment(AppContext.BaseDirectory)));
 
@@ -100,7 +100,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_logs_one_send_entry_and_one_receive_entry_per_subscriber()
+    public async Task Publish_when_a_topic_has_subscribers_logs_one_send_entry_and_one_receive_entry_per_subscriber()
     {
         var (sut, time) = await CreateAsync();
 
@@ -152,7 +152,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_raises_OnChanged()
+    public async Task Publish_when_called_raises_OnChanged()
     {
         var (sut, _) = await CreateAsync();
         var raised = 0;
@@ -167,7 +167,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_passes_each_subscriber_handler_its_own_copy_and_skips_the_source()
+    public async Task Publish_when_a_topic_has_subscribers_passes_each_handler_its_own_copy_and_skips_the_source()
     {
         var (sut, _) = await CreateAsync();
         var fields = Fields(("CustomerId", "CUST0001"), ("Name", "Acme"));
@@ -250,7 +250,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task SetOnline_marks_only_the_deliveries_that_waited_in_the_queue_as_queued()
+    public async Task SetOnline_when_an_app_comes_back_marks_only_the_deliveries_that_waited_in_the_queue_as_queued()
     {
         var (sut, _) = await CreateAsync();
         sut.SetOnline("ERP", online: false);
@@ -551,7 +551,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task SetBus_resets_the_log_accounts_queues_and_pending_timeouts()
+    public async Task SetBus_when_called_resets_the_log_accounts_queues_and_pending_timeouts()
     {
         var (sut, time) = await CreateAsync();
         sut.SetOnline("ERP", online: false);
@@ -572,7 +572,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Entries_and_Accounts_return_snapshots_that_later_activity_does_not_change()
+    public async Task Entries_and_Accounts_when_activity_follows_return_snapshots_that_do_not_change()
     {
         var (sut, _) = await CreateAsync();
         sut.Publish("account.created", "ERP", "CUST0099", Fields(("CustomerId", "CUST0099"), ("Name", "New Co")));
