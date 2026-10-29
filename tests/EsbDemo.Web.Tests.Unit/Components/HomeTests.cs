@@ -36,7 +36,7 @@ public sealed class HomeTests : ComponentTestBase
 
 
     [Fact]
-    public void Home_styles_a_delivery_that_waited_in_the_queue_as_queued()
+    public void Home_when_a_delivery_waited_in_the_queue_styles_it_as_queued()
     {
         Monitor.SetOnline("ERP", online: false);
         Monitor.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0001")));

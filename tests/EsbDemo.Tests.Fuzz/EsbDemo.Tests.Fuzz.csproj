@@ -12,6 +12,11 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<Compile Include="..\Shared\*.cs" LinkBase="Shared" />
+		<Using Include="EsbDemo.Tests.Shared" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\src\EsbDemo.Web\EsbDemo.Web.csproj" />
 	</ItemGroup>
 

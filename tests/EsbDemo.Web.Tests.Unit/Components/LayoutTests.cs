@@ -9,7 +9,7 @@ namespace EsbDemo.Web.Tests.Unit.Components;
 public sealed class LayoutTests : ComponentTestBase
 {
     [Fact]
-    public void MainLayout_renders_the_body_the_app_panel_and_the_selected_bus()
+    public void MainLayout_when_rendered_shows_the_body_the_app_panel_and_the_selected_bus()
     {
         var cut = Render<MainLayout>(p => p.Add(l => l.Body, "<p id=\"page-body\">page</p>"));
 
@@ -34,7 +34,7 @@ public sealed class LayoutTests : ComponentTestBase
 
 
     [Fact]
-    public void AppPanel_lists_the_apps_in_display_order_with_their_actions()
+    public void AppPanel_when_rendered_lists_the_apps_in_display_order_with_their_actions()
     {
         var cut = Render<AppPanel>();
 
@@ -134,7 +134,7 @@ public sealed class LayoutTests : ComponentTestBase
 
 
     [Fact]
-    public async Task ActionDialog_closes_on_cancel_or_on_a_backdrop_click()
+    public async Task ActionDialog_when_cancelled_or_the_backdrop_is_clicked_closes()
     {
         var cut = Render<ActionDialog>();
         await cut.InvokeAsync(() => cut.Instance.Open("account.create", "CRM"));
@@ -176,7 +176,7 @@ public sealed class LayoutTests : ComponentTestBase
 
 
     [Fact]
-    public async Task ActionDialog_customer_picker_lists_customers_and_pending_requests_and_copies_the_choice()
+    public async Task ActionDialog_when_the_topic_has_a_customer_field_lists_customers_and_pending_requests_and_copies_the_choice()
     {
         Monitor.Publish("account.created", "ERP", "CUST0099", Fields(("CustomerId", "CUST0099"), ("Name", "New Co"), ("Email", "n@new.co")));
         Monitor.Publish("account.create", "CRM", "corr-p", Fields(("Name", "Waiting Co")));
