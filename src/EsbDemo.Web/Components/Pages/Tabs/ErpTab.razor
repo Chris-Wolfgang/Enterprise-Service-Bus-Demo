@@ -1,4 +1,4 @@
-@inject ErpDbContext Db
+@inject IDbContextFactory<ErpDbContext> DbFactory
 @inject ErpConnector Connector
 @inject TimeProvider Clock
 @implements IDisposable
@@ -121,7 +121,7 @@
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+        _customers = await LoadAsync();
         _clock = BuildClock();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
         _ = RunClockAsync(_timer);
@@ -150,7 +150,7 @@
     private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
         {
-            _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+            _customers = await LoadAsync();
             StateHasChanged();
         });
 
@@ -192,10 +192,8 @@
         cust.Name    = _editName;
         cust.Email   = _editEmail;
         cust.Phone   = _editPhone;
-        cust.ModDate = DateTime.UtcNow;
-        Db.CustMast.Update(cust);
-        await Db.SaveChangesAsync();
-        Db.ChangeTracker.Clear();
+        cust.ModDate = Clock.GetUtcNow().UtcDateTime;
+        await UpdateAsync(cust);
         _mode = ErpMode.Detail;
 
         Connector.PublishAccountUpdated(cust);
@@ -209,11 +207,10 @@
         if (cust is null) return;
 
         var wasActive = cust.IsActive;
-        cust.ClosedDate = wasActive ? DateTime.UtcNow : null;
-        cust.ModDate    = DateTime.UtcNow;
-        Db.CustMast.Update(cust);
-        await Db.SaveChangesAsync();
-        Db.ChangeTracker.Clear();
+        var now = Clock.GetUtcNow().UtcDateTime;
+        cust.ClosedDate = wasActive ? now : null;
+        cust.ModDate    = now;
+        await UpdateAsync(cust);
 
         Connector.PublishStatusChanged(cust, wasActive);
     }
@@ -240,6 +237,7 @@
     {
         if (string.IsNullOrWhiteSpace(_editName)) return;
 
+        var now = Clock.GetUtcNow().UtcDateTime;
         var cust = new CustMast
         {
             CustNum    = _newCustNum,
@@ -250,14 +248,17 @@
             Terms      = string.IsNullOrWhiteSpace(_editTerms) ? null : _editTerms.ToUpperInvariant(),
             CreditLim  = decimal.TryParse(_editCredit, out var cr) ? cr : 0m,
             ClosedDate = null,
-            AddDate    = DateTime.UtcNow,
-            ModDate    = DateTime.UtcNow
+            AddDate    = now,
+            ModDate    = now
         };
 
-        Db.CustMast.Add(cust);
-        await Db.SaveChangesAsync();
-        Db.ChangeTracker.Clear();
-        _customers = await Db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            db.CustMast.Add(cust);
+            await db.SaveChangesAsync();
+        }
+
+        _customers = await LoadAsync();
 
         _activeCustNum = cust.CustNum;
         _mode = ErpMode.Detail;
@@ -269,5 +270,18 @@
     {
         _activeCustNum = null;
         _mode = ErpMode.List;
+    }
+
+    private async Task<List<CustMast>> LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await db.CustMast.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+    }
+
+    private async Task UpdateAsync(CustMast cust)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.CustMast.Update(cust);
+        await db.SaveChangesAsync();
     }
 }
