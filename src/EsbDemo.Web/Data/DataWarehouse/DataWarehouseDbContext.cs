@@ -14,6 +14,7 @@ public sealed class DataWarehouseDbContext(DbContextOptions<DataWarehouseDbConte
     public DbSet<DwCustomer> Customers => Set<DwCustomer>();
 
 
+
     /// <summary>
     /// Configures the model and seeds the Data Warehouse system's demo customers.
     /// </summary>

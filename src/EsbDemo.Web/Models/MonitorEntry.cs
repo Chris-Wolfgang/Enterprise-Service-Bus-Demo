@@ -11,10 +11,12 @@ public sealed record MonitorEntry
     public DateTimeOffset Timestamp { get; init; }
 
 
+
     /// <summary>
     /// Gets the name of the app that sent or received the message.
     /// </summary>
     public string AppName { get; init; } = string.Empty;
+
 
 
     /// <summary>
@@ -23,10 +25,12 @@ public sealed record MonitorEntry
     public string Direction { get; init; } = string.Empty;
 
 
+
     /// <summary>
     /// Gets the message topic.
     /// </summary>
     public string Topic { get; init; } = string.Empty;
+
 
 
     /// <summary>
@@ -35,16 +39,19 @@ public sealed record MonitorEntry
     public string? CorrelationId { get; init; }
 
 
+
     /// <summary>
     /// Gets the human-readable description of the message shown in the log.
     /// </summary>
     public string Summary { get; init; } = string.Empty;
 
 
+
     /// <summary>
     /// Gets the CSS class that colours the row, usually from <see cref="Services.ConfigService.GetTopicCssClass"/>.
     /// </summary>
     public string CssClass { get; init; } = string.Empty;
+
 
 
     /// <summary>

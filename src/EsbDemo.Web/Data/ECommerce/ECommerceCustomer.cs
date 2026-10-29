@@ -14,6 +14,8 @@ public sealed class ECommerceCustomer
     [MaxLength(8)]
     public string CustNum { get; set; } = string.Empty;
 
+
+
     /// <summary>
     /// Gets or sets the customer name.
     /// </summary>
@@ -21,11 +23,15 @@ public sealed class ECommerceCustomer
     [MaxLength(30)]
     public string Name { get; set; } = string.Empty;
 
+
+
     /// <summary>
     /// Gets or sets the customer's email address.
     /// </summary>
     [MaxLength(60)]
     public string? Email { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets the customer's phone number.
@@ -33,10 +39,14 @@ public sealed class ECommerceCustomer
     [MaxLength(15)]
     public string? Phone { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets a value indicating whether the customer can place orders. Defaults to <see langword="true"/>.
     /// </summary>
     public bool IsActive { get; set; } = true;
+
+
 
     /// <summary>
     /// Gets or sets when the customer was created, in UTC.

@@ -17,11 +17,15 @@ public sealed class CrmAccount
     [Key]
     public Guid AccountId { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets the shared customer number (such as <c>CUST0001</c>), which is the bus's <c>CustomerId</c>.
     /// </summary>
     [MaxLength(8)]
     public string? AccountNumber { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets the account name.
@@ -30,11 +34,15 @@ public sealed class CrmAccount
     [MaxLength(160)]
     public string Name { get; set; } = string.Empty;
 
+
+
     /// <summary>
     /// Gets or sets the primary email address; the bus's <c>Email</c> field.
     /// </summary>
     [MaxLength(100)]
     public string? EMailAddress1 { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets the primary phone number; the bus's <c>Phone</c> field.
@@ -42,20 +50,28 @@ public sealed class CrmAccount
     [MaxLength(50)]
     public string? Telephone1 { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets the account's classification. Defaults to <see cref="Crm.AccountTypeCode.Customer"/>.
     /// </summary>
     public AccountTypeCode AccountTypeCode { get; set; } = AccountTypeCode.Customer;
+
+
 
     /// <summary>
     /// Gets or sets the account's status. Defaults to <see cref="AccountStatusCode.Active"/>.
     /// </summary>
     public AccountStatusCode StatusCode { get; set; } = AccountStatusCode.Active;
 
+
+
     /// <summary>
     /// Gets or sets when the account was created, in UTC.
     /// </summary>
     public DateTime CreatedOn { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets when the account was last modified, in UTC.

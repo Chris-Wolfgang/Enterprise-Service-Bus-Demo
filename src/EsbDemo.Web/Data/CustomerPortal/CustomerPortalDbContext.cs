@@ -14,6 +14,7 @@ public sealed class CustomerPortalDbContext(DbContextOptions<CustomerPortalDbCon
     public DbSet<PortalCustomer> Customers => Set<PortalCustomer>();
 
 
+
     /// <summary>
     /// Configures the model and seeds the Customer Portal system's demo customers.
     /// </summary>

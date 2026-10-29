@@ -15,6 +15,8 @@ public sealed class DwCustomer
     [MaxLength(8)]
     public string CustNum { get; set; } = string.Empty;
 
+
+
     /// <summary>
     /// Gets or sets the customer name.
     /// </summary>
@@ -22,11 +24,15 @@ public sealed class DwCustomer
     [MaxLength(30)]
     public string Name { get; set; } = string.Empty;
 
+
+
     /// <summary>
     /// Gets or sets the customer's email address.
     /// </summary>
     [MaxLength(60)]
     public string? Email { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets the customer's phone number.
@@ -34,11 +40,15 @@ public sealed class DwCustomer
     [MaxLength(15)]
     public string? Phone { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets the customer type code.
     /// </summary>
     [MaxLength(4)]
     public string? CustType { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets the payment terms code.
@@ -46,21 +56,29 @@ public sealed class DwCustomer
     [MaxLength(6)]
     public string? Terms { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets the credit limit.
     /// </summary>
     [Column(TypeName = "decimal(12,2)")]
     public decimal? CreditLim { get; set; }
 
+
+
     /// <summary>
     /// Gets or sets a value indicating whether the customer is active. Defaults to <see langword="true"/>.
     /// </summary>
     public bool IsActive { get; set; } = true;
 
+
+
     /// <summary>
     /// Gets or sets when the warehouse first received this customer, in UTC.
     /// </summary>
     public DateTime FirstSeenDate { get; set; }
+
+
 
     /// <summary>
     /// Gets or sets when the warehouse last applied a change to this customer, in UTC.
