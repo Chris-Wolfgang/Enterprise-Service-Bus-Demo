@@ -1,4 +1,4 @@
-@inject DataWarehouseDbContext Db
+@inject IDbContextFactory<DataWarehouseDbContext> DbFactory
 @inject DataWarehouseConnector Connector
 @implements IDisposable
 
@@ -51,7 +51,7 @@
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+        _customers = await LoadAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
@@ -63,7 +63,13 @@
     private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
         {
-            _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+            _customers = await LoadAsync();
             StateHasChanged();
         });
+
+    private async Task<List<DwCustomer>> LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+    }
 }

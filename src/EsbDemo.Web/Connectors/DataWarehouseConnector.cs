@@ -10,7 +10,8 @@ namespace EsbDemo.Web.Connectors;
 /// </summary>
 public sealed class DataWarehouseConnector
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDbContextFactory<DataWarehouseDbContext> _dbFactory;
+    private readonly TimeProvider _timeProvider;
 
 
     /// <summary>Fired after an inbound ESB message updates the Data Warehouse database.</summary>
@@ -22,12 +23,18 @@ public sealed class DataWarehouseConnector
     /// with <paramref name="monitor"/> under the app name <c>Data Warehouse</c>.
     /// </summary>
     /// <param name="monitor">The bus monitor that delivers messages to the Data Warehouse system.</param>
-    /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the Data Warehouse database.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
-    public DataWarehouseConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
+    /// <param name="dbFactory">Creates the short-lived context each inbound message uses to reach the Data Warehouse database.</param>
+    /// <param name="timeProvider">The clock that stamps the rows an inbound message creates or changes.</param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="monitor"/>, <paramref name="dbFactory"/> or <paramref name="timeProvider"/> is <see langword="null"/>.
+    /// </exception>
+    public DataWarehouseConnector(MonitorService monitor, IDbContextFactory<DataWarehouseDbContext> dbFactory, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(monitor);
-        _scopeFactory = scopeFactory;
+        ArgumentNullException.ThrowIfNull(dbFactory);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        _dbFactory = dbFactory;
+        _timeProvider = timeProvider;
         monitor.RegisterHandler("Data Warehouse", HandleInboundAsync);
     }
 
@@ -37,9 +44,8 @@ public sealed class DataWarehouseConnector
         if (!fields.TryGetValue("CustomerId", out var custNum) || string.IsNullOrEmpty(custNum))
             return;
 
-        var scope = _scopeFactory.CreateAsyncScope();
-        await using var scopeDisposal = scope.ConfigureAwait(false);
-        var db = scope.ServiceProvider.GetRequiredService<DataWarehouseDbContext>();
+        var db = await _dbFactory.CreateDbContextAsync().ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var row = await db.Customers.FirstOrDefaultAsync(
             c => c.CustNum == custNum
@@ -56,7 +62,7 @@ public sealed class DataWarehouseConnector
             if (fields.TryGetValue("Name",  out var name))  row.Name  = name;
             if (fields.TryGetValue("Email", out var email)) row.Email = email;
             if (fields.TryGetValue("Phone", out var phone)) row.Phone = phone;
-            row.LastUpdated = DateTime.UtcNow;
+            row.LastUpdated = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -64,7 +70,7 @@ public sealed class DataWarehouseConnector
         {
             if (row is null) return;
             row.IsActive    = false;
-            row.LastUpdated = DateTime.UtcNow;
+            row.LastUpdated = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -72,7 +78,7 @@ public sealed class DataWarehouseConnector
         {
             if (row is null) return;
             row.IsActive    = true;
-            row.LastUpdated = DateTime.UtcNow;
+            row.LastUpdated = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -93,8 +99,8 @@ public sealed class DataWarehouseConnector
             Email         = email,
             Phone         = phone,
             IsActive      = true,
-            FirstSeenDate = DateTime.UtcNow,
-            LastUpdated   = DateTime.UtcNow
+            FirstSeenDate = _timeProvider.GetUtcNow().UtcDateTime,
+            LastUpdated   = _timeProvider.GetUtcNow().UtcDateTime
         };
         await db.Customers.AddAsync(row).ConfigureAwait(false);
         await db.SaveChangesAsync().ConfigureAwait(false);

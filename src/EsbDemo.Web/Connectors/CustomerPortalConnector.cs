@@ -12,7 +12,8 @@ namespace EsbDemo.Web.Connectors;
 public sealed class CustomerPortalConnector
 {
     private readonly MonitorService _monitor;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDbContextFactory<CustomerPortalDbContext> _dbFactory;
+    private readonly TimeProvider _timeProvider;
 
 
     /// <summary>Fired after an inbound ESB message updates the Customer Portal database.</summary>
@@ -24,13 +25,19 @@ public sealed class CustomerPortalConnector
     /// with <paramref name="monitor"/> under the app name <c>Customer Portal</c>.
     /// </summary>
     /// <param name="monitor">The bus monitor that delivers messages to the Customer Portal system.</param>
-    /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the Customer Portal database.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
-    public CustomerPortalConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
+    /// <param name="dbFactory">Creates the short-lived context each inbound message uses to reach the Customer Portal database.</param>
+    /// <param name="timeProvider">The clock that stamps the rows an inbound message creates or changes.</param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="monitor"/>, <paramref name="dbFactory"/> or <paramref name="timeProvider"/> is <see langword="null"/>.
+    /// </exception>
+    public CustomerPortalConnector(MonitorService monitor, IDbContextFactory<CustomerPortalDbContext> dbFactory, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(dbFactory);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         _monitor = monitor;
-        _scopeFactory = scopeFactory;
+        _dbFactory = dbFactory;
+        _timeProvider = timeProvider;
         monitor.RegisterHandler("Customer Portal", HandleInboundAsync);
     }
 
@@ -63,9 +70,8 @@ public sealed class CustomerPortalConnector
         if (!fields.TryGetValue("CustomerId", out var custNum) || string.IsNullOrEmpty(custNum))
             return;
 
-        var scope = _scopeFactory.CreateAsyncScope();
-        await using var scopeDisposal = scope.ConfigureAwait(false);
-        var db = scope.ServiceProvider.GetRequiredService<CustomerPortalDbContext>();
+        var db = await _dbFactory.CreateDbContextAsync().ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var cust = await db.Customers.FirstOrDefaultAsync(
             c => c.CustNum == custNum
@@ -86,7 +92,7 @@ public sealed class CustomerPortalConnector
                     Email       = email,
                     Phone       = phone,
                     IsActive    = true,
-                    CreatedDate = DateTime.UtcNow
+                    CreatedDate = _timeProvider.GetUtcNow().UtcDateTime
                 }).ConfigureAwait(false);
                 await db.SaveChangesAsync().ConfigureAwait(false);
                 DataChanged?.Invoke(this, EventArgs.Empty);
