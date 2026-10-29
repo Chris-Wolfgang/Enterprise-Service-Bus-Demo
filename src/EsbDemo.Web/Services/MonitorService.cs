@@ -722,7 +722,30 @@ public sealed partial class MonitorService
         !_onlineStatus.TryGetValue(appName, out var online) || online;
 
 
-    private void NotifyChanged() => OnChanged?.Invoke(this, EventArgs.Empty);
+    // Invokes each subscriber on its own, so one throwing UI subscriber neither stops the others
+    // nor propagates into the Publish / SetOnline / SetBus call that raised the event (#165).
+    private void NotifyChanged()
+    {
+        if (OnChanged is not { } handlers)
+            return;
+
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler>())
+        {
+            try
+            {
+                handler(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                LogSubscriberFault(_logger, ex);
+            }
+        }
+    }
+
+
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "An OnChanged subscriber threw")]
+    private static partial void LogSubscriberFault(ILogger logger, Exception exception);
 
 
     private static string? BuildReceiverSummary(
