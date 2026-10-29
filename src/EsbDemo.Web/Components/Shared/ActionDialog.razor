@@ -1,5 +1,6 @@
 @inject ConfigService Config
 @inject MonitorService Monitor
+@inject TimeProvider Clock
 
 @if (_isOpen)
 {
@@ -98,7 +99,7 @@
         _accountFieldName = accountField?.Name ?? string.Empty;
 
         _fields = new Dictionary<string, string>();
-        var now = DateTimeOffset.UtcNow;
+        var now = Clock.GetUtcNow();
 
         foreach (var field in _topicFields.Where(f => !string.Equals(f.Type, "account", StringComparison.Ordinal)))
         {

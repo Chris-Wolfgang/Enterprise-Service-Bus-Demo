@@ -103,11 +103,11 @@ internal sealed class ConnectorHarness : IDisposable
         _services = services;
         Monitor = monitor;
         Time = time;
-        Crm = new CrmConnector(monitor, ScopeFactory);
-        Erp = new ErpConnector(monitor, ScopeFactory);
-        ECommerce = new ECommerceConnector(monitor, ScopeFactory);
-        Portal = new CustomerPortalConnector(monitor, ScopeFactory);
-        Warehouse = new DataWarehouseConnector(monitor, ScopeFactory);
+        Crm = new CrmConnector(monitor, Factory<CrmDbContext>(), time);
+        Erp = new ErpConnector(monitor, Factory<ErpDbContext>(), time);
+        ECommerce = new ECommerceConnector(monitor, Factory<ECommerceDbContext>(), time);
+        Portal = new CustomerPortalConnector(monitor, Factory<CustomerPortalDbContext>(), time);
+        Warehouse = new DataWarehouseConnector(monitor, Factory<DataWarehouseDbContext>(), time);
     }
 
 
@@ -120,7 +120,9 @@ internal sealed class ConnectorHarness : IDisposable
 
 
 
-    public IServiceScopeFactory ScopeFactory => _services.GetRequiredService<IServiceScopeFactory>();
+    public IDbContextFactory<TContext> Factory<TContext>()
+        where TContext : DbContext =>
+        _services.GetRequiredService<IDbContextFactory<TContext>>();
 
 
 
@@ -148,11 +150,11 @@ internal sealed class ConnectorHarness : IDisposable
     {
         var suffix = Guid.NewGuid().ToString("N");
         var services = new ServiceCollection()
-            .AddDbContext<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix))
-            .AddDbContext<ErpDbContext>(o => o.UseInMemoryDatabase("ERP-" + suffix))
-            .AddDbContext<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce-" + suffix))
-            .AddDbContext<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("Portal-" + suffix))
-            .AddDbContext<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DW-" + suffix))
+            .AddDbContextFactory<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix))
+            .AddDbContextFactory<ErpDbContext>(o => o.UseInMemoryDatabase("ERP-" + suffix))
+            .AddDbContextFactory<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce-" + suffix))
+            .AddDbContextFactory<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("Portal-" + suffix))
+            .AddDbContextFactory<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DW-" + suffix))
             .BuildServiceProvider();
 
         using (var scope = services.CreateScope())

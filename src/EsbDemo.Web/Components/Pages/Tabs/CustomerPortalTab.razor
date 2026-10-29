@@ -1,4 +1,4 @@
-@inject CustomerPortalDbContext Db
+@inject IDbContextFactory<CustomerPortalDbContext> DbFactory
 @inject CustomerPortalConnector Connector
 @implements IDisposable
 
@@ -89,7 +89,7 @@
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+        _customers = await LoadAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
@@ -101,7 +101,7 @@
     private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
         {
-            _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+            _customers = await LoadAsync();
             StateHasChanged();
         });
 
@@ -123,12 +123,23 @@
         cust.Name = _editName;
         cust.Email = _editEmail;
         cust.Phone = _editPhone;
-        Db.Customers.Update(cust);
-        await Db.SaveChangesAsync();
-        Db.ChangeTracker.Clear();
+        await UpdateAsync(cust);
         Connector.PublishAccountUpdated(cust);
         _editId = "";
     }
 
     private void CancelEdit() => _editId = "";
+
+    private async Task<List<PortalCustomer>> LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
+    }
+
+    private async Task UpdateAsync(PortalCustomer cust)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Customers.Update(cust);
+        await db.SaveChangesAsync();
+    }
 }

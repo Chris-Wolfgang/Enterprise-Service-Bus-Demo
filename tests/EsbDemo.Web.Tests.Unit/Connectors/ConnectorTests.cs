@@ -26,15 +26,32 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public void Constructors_when_monitor_is_null_throw_ArgumentNullException()
+    public async Task Constructors_when_a_dependency_is_null_throw_ArgumentNullException()
     {
-        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        using var h = await ConnectorHarness.CreateAsync();
+        var crm = h.Factory<CrmDbContext>();
+        var erp = h.Factory<ErpDbContext>();
+        var shop = h.Factory<ECommerceDbContext>();
+        var portal = h.Factory<CustomerPortalDbContext>();
+        var dw = h.Factory<DataWarehouseDbContext>();
 
-        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new CrmConnector(null!, scopes)).ParamName);
-        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new ErpConnector(null!, scopes)).ParamName);
-        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new ECommerceConnector(null!, scopes)).ParamName);
-        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new CustomerPortalConnector(null!, scopes)).ParamName);
-        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new DataWarehouseConnector(null!, scopes)).ParamName);
+        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new CrmConnector(null!, crm, h.Time)).ParamName);
+        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new ErpConnector(null!, erp, h.Time)).ParamName);
+        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new ECommerceConnector(null!, shop, h.Time)).ParamName);
+        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new CustomerPortalConnector(null!, portal, h.Time)).ParamName);
+        Assert.Equal("monitor", Assert.Throws<ArgumentNullException>(() => new DataWarehouseConnector(null!, dw, h.Time)).ParamName);
+
+        Assert.Equal("dbFactory", Assert.Throws<ArgumentNullException>(() => new CrmConnector(h.Monitor, null!, h.Time)).ParamName);
+        Assert.Equal("dbFactory", Assert.Throws<ArgumentNullException>(() => new ErpConnector(h.Monitor, null!, h.Time)).ParamName);
+        Assert.Equal("dbFactory", Assert.Throws<ArgumentNullException>(() => new ECommerceConnector(h.Monitor, null!, h.Time)).ParamName);
+        Assert.Equal("dbFactory", Assert.Throws<ArgumentNullException>(() => new CustomerPortalConnector(h.Monitor, null!, h.Time)).ParamName);
+        Assert.Equal("dbFactory", Assert.Throws<ArgumentNullException>(() => new DataWarehouseConnector(h.Monitor, null!, h.Time)).ParamName);
+
+        Assert.Equal("timeProvider", Assert.Throws<ArgumentNullException>(() => new CrmConnector(h.Monitor, crm, null!)).ParamName);
+        Assert.Equal("timeProvider", Assert.Throws<ArgumentNullException>(() => new ErpConnector(h.Monitor, erp, null!)).ParamName);
+        Assert.Equal("timeProvider", Assert.Throws<ArgumentNullException>(() => new ECommerceConnector(h.Monitor, shop, null!)).ParamName);
+        Assert.Equal("timeProvider", Assert.Throws<ArgumentNullException>(() => new CustomerPortalConnector(h.Monitor, portal, null!)).ParamName);
+        Assert.Equal("timeProvider", Assert.Throws<ArgumentNullException>(() => new DataWarehouseConnector(h.Monitor, dw, null!)).ParamName);
     }
 
 

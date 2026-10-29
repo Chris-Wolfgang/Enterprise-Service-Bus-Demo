@@ -12,7 +12,8 @@ namespace EsbDemo.Web.Connectors;
 public sealed class CrmConnector
 {
     private readonly MonitorService _monitor;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDbContextFactory<CrmDbContext> _dbFactory;
+    private readonly TimeProvider _timeProvider;
 
 
     /// <summary>Fired after an inbound ESB message updates the CRM database.</summary>
@@ -24,13 +25,19 @@ public sealed class CrmConnector
     /// with <paramref name="monitor"/> under the app name <c>CRM</c>.
     /// </summary>
     /// <param name="monitor">The bus monitor that delivers messages to the CRM system.</param>
-    /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the CRM database.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
-    public CrmConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
+    /// <param name="dbFactory">Creates the short-lived context each inbound message uses to reach the CRM database.</param>
+    /// <param name="timeProvider">The clock that stamps the rows an inbound message creates or changes.</param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="monitor"/>, <paramref name="dbFactory"/> or <paramref name="timeProvider"/> is <see langword="null"/>.
+    /// </exception>
+    public CrmConnector(MonitorService monitor, IDbContextFactory<CrmDbContext> dbFactory, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(dbFactory);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         _monitor = monitor;
-        _scopeFactory = scopeFactory;
+        _dbFactory = dbFactory;
+        _timeProvider = timeProvider;
         monitor.RegisterHandler("CRM", HandleInboundAsync);
     }
 
@@ -88,9 +95,8 @@ public sealed class CrmConnector
         if (!fields.TryGetValue("CustomerId", out var customerId) || string.IsNullOrEmpty(customerId))
             return;
 
-        var scope = _scopeFactory.CreateAsyncScope();
-        await using var scopeDisposal = scope.ConfigureAwait(false);
-        var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+        var db = await _dbFactory.CreateDbContextAsync().ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var acct = await db.Accounts.FirstOrDefaultAsync(
             a => a.AccountNumber == customerId
@@ -108,7 +114,7 @@ public sealed class CrmConnector
             if (fields.TryGetValue("Name",  out var name))  acct.Name           = name;
             if (fields.TryGetValue("Email", out var email)) acct.EMailAddress1  = email;
             if (fields.TryGetValue("Phone", out var phone)) acct.Telephone1     = phone;
-            acct.ModifiedOn = DateTime.UtcNow;
+            acct.ModifiedOn = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -116,7 +122,7 @@ public sealed class CrmConnector
         {
             // ESB deactivated → CRM StatusCode.Inactive
             acct.StatusCode = AccountStatusCode.Inactive;
-            acct.ModifiedOn = DateTime.UtcNow;
+            acct.ModifiedOn = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -124,7 +130,7 @@ public sealed class CrmConnector
         {
             // ESB activated → CRM StatusCode.Active
             acct.StatusCode = AccountStatusCode.Active;
-            acct.ModifiedOn = DateTime.UtcNow;
+            acct.ModifiedOn = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -152,8 +158,8 @@ public sealed class CrmConnector
             EMailAddress1 = newEmail,
             Telephone1    = newPhone,
             StatusCode    = AccountStatusCode.Active,
-            CreatedOn     = DateTime.UtcNow,
-            ModifiedOn    = DateTime.UtcNow
+            CreatedOn     = _timeProvider.GetUtcNow().UtcDateTime,
+            ModifiedOn    = _timeProvider.GetUtcNow().UtcDateTime
         };
         await db.Accounts.AddAsync(newAcct).ConfigureAwait(false);
         await db.SaveChangesAsync().ConfigureAwait(false);
