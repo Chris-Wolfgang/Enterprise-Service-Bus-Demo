@@ -7,6 +7,8 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <!-- A demo application, not a library: nothing here is published to NuGet. -->
     <IsPackable>false</IsPackable>
+    <!-- The app's release version: release.yaml requires the release tag (vX.Y.Z) to match it. -->
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
