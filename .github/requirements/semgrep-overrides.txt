@@ -8,3 +8,22 @@
 # installed. The <1.31 cap keeps this to the security fix. Drop the override once
 # semgrep's own pin reaches 1.30.0.
 mcp>=1.30.0,<1.31
+#
+# opentelemetry-*: semgrep pins opentelemetry-api~=1.37.0 (still true of semgrep
+# 1.182.1 on PyPI), which is affected by GHSA-xcq7-p3pf-p88h "Unbounded tracestate
+# parsing in opentelemetry-api" (vulnerable <= 1.45.0; Dependabot alert #35).
+# 1.45.1 is the patched release. The sdk, exporter, proto and instrumentation
+# packages are released in lockstep with the api (1.x / 0.yb), so the whole family
+# moves together to 1.45.x / 0.66bx (1.45.2 / 0.66b2 at the time of writing). The
+# caps keep this to the security fix. Drop these overrides once semgrep's own
+# pins reach 1.45.1.
+opentelemetry-api>=1.45.1,<1.46
+opentelemetry-sdk>=1.45.1,<1.46
+opentelemetry-exporter-otlp-proto-http>=1.45.1,<1.46
+opentelemetry-exporter-otlp-proto-common>=1.45.1,<1.46
+opentelemetry-proto>=1.45.1,<1.46
+opentelemetry-instrumentation>=0.66b1,<0.67
+opentelemetry-instrumentation-requests>=0.66b1,<0.67
+opentelemetry-instrumentation-threading>=0.66b1,<0.67
+opentelemetry-semantic-conventions>=0.66b1,<0.67
+opentelemetry-util-http>=0.66b1,<0.67
