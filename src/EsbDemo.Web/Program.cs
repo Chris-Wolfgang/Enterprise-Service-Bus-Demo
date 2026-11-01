@@ -10,7 +10,8 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRazorComponents()
+builder.Services
+    .AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddSingleton(TimeProvider.System);
@@ -61,7 +62,8 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseHttpsRedirection();
 app.UseAntiforgery();
 app.MapStaticAssets();
-app.MapRazorComponents<App>()
+app
+    .MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 await app.RunAsync().ConfigureAwait(false);
