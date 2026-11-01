@@ -154,8 +154,8 @@ public sealed class Properties
                         RegexTimeout
                     );
                     return match.Success
-                        && int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) is >= 1000 and <= 9998
-                        && int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) is >= 10 and <= 98;
+                        && int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) is >= 1000 and <= 9999
+                        && int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) is >= 10 and <= 99;
                 },
                 iter: FuzzIterations,
                 time: FuzzTimeSeconds
