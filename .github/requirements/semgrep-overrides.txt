@@ -1,0 +1,10 @@
+# Overrides applied when compiling semgrep.txt (see the command in its header).
+#
+# mcp: semgrep pins mcp==1.29.0 (still true of semgrep 1.182.1 on PyPI), which is
+# affected by GHSA-84m7-p3x7-pcfv "MCP Python SDK: Unbounded Session Accumulation
+# in StreamableHTTP Transport" (vulnerable >= 1.8.0, < 1.30.0; Dependabot alert
+# #33). 1.30.0 is the patched release. CI installs semgrep.txt with
+# `pip install --no-deps --require-hashes`, so the override is what gets
+# installed. The <1.31 cap keeps this to the security fix. Drop the override once
+# semgrep's own pin reaches 1.30.0.
+mcp>=1.30.0,<1.31
