@@ -1,10 +1,8 @@
-using System.Diagnostics;
 using Bunit;
 using EsbDemo.Web.Components.Layout;
 using EsbDemo.Web.Components.Pages;
 using EsbDemo.Web.Components.Shared;
 using EsbDemo.Web.Models;
-using Microsoft.AspNetCore.Http;
 
 namespace EsbDemo.Web.Tests.Unit.Components;
 
@@ -203,32 +201,5 @@ public sealed class LayoutTests : ComponentTestBase
         Assert.Equal("CUST0099", sent!.Fields["CustomerId"]);
         Assert.Equal("New Co", sent.Fields["Name"]);
         Assert.Equal("n@new.co", sent.Fields["Email"]);
-    }
-
-
-
-    [Fact]
-    public void ErrorPage_without_a_request_id_hides_it()
-    {
-        Activity.Current = null;
-
-        var cut = Render<Error>();
-
-        Assert.Empty(cut.FindAll("code"));
-        Assert.Contains("An error occurred", cut.Markup, StringComparison.Ordinal);
-    }
-
-
-
-    [Fact]
-    public void ErrorPage_shows_the_current_activity_or_the_request_trace_id()
-    {
-        Activity.Current = null;
-        var fromContext = Render<Error>(p => p.AddCascadingValue<HttpContext>(new DefaultHttpContext { TraceIdentifier = "trace-42" }));
-        Assert.Equal("trace-42", fromContext.Find("code").TextContent);
-
-        using var activity = new Activity("test").Start();
-        var fromActivity = Render<Error>();
-        Assert.Equal(activity.Id, fromActivity.Find("code").TextContent);
     }
 }

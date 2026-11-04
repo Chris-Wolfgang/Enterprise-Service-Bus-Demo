@@ -14,6 +14,16 @@ namespace EsbDemo.Web.Services;
 /// </remarks>
 public sealed class MonitorService
 {
+    /// <summary>How long an app takes to send its configured auto-response.</summary>
+    internal static readonly TimeSpan AutoResponseDelay = TimeSpan.FromMilliseconds(500);
+
+
+
+    /// <summary>How long an <c>account.create</c> waits for the matching <c>account.created</c>.</summary>
+    internal static readonly TimeSpan AccountCreateTimeout = TimeSpan.FromSeconds(10);
+
+
+
     private readonly ConfigService _config;
     private readonly TimeProvider _timeProvider;
 
@@ -483,7 +493,7 @@ public sealed class MonitorService
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(10), _timeProvider, ct).ConfigureAwait(false);
+            await Task.Delay(AccountCreateTimeout, _timeProvider, ct).ConfigureAwait(false);
 
             var timedOut = false;
             lock (_gate)
@@ -527,7 +537,7 @@ public sealed class MonitorService
         Dictionary<string, string> originalFields,
         string originalSourceApp)
     {
-        await Task.Delay(TimeSpan.FromMilliseconds(500), _timeProvider, CancellationToken.None).ConfigureAwait(false);
+        await Task.Delay(AutoResponseDelay, _timeProvider, CancellationToken.None).ConfigureAwait(false);
 
         // The reply describes the same customer or order as the request, so the request's values
         // win. Generated defaults only fill fields the request did not carry or left empty, such

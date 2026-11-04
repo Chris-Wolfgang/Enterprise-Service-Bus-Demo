@@ -64,15 +64,21 @@ internal static class TestConfig
     public static async Task<ConfigService> LoadAsync(string appsJson, string topicsJson)
     {
         var root = Path.Combine(Path.GetTempPath(), "esb-tests-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "config"));
-        await File.WriteAllTextAsync(Path.Combine(root, "config", "apps.json"), appsJson);
-        await File.WriteAllTextAsync(Path.Combine(root, "config", "topics.json"), topicsJson);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "config"));
+            await File.WriteAllTextAsync(Path.Combine(root, "config", "apps.json"), appsJson);
+            await File.WriteAllTextAsync(Path.Combine(root, "config", "topics.json"), topicsJson);
 
-        var config = new ConfigService(new FakeWebHostEnvironment(root));
-        await config.LoadAsync();
-
-        Directory.Delete(root, recursive: true);
-        return config;
+            var config = new ConfigService(new FakeWebHostEnvironment(root));
+            await config.LoadAsync();
+            return config;
+        }
+        finally
+        {
+            // Also on failure, so a config that does not load does not leak the folder.
+            Directory.Delete(root, recursive: true);
+        }
     }
 
 
