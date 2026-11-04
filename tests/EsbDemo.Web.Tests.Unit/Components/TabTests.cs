@@ -1,3 +1,4 @@
+using System.Globalization;
 using Bunit;
 using EsbDemo.Web.Components.Pages.Tabs;
 using EsbDemo.Web.Data.Crm;
@@ -206,6 +207,31 @@ public sealed class TabTests : ComponentTestBase
 
         var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0006"));
         Assert.Equal(("RETL", "NET60", 2500.50m), (saved.CustType, saved.Terms, saved.CreditLim));
+    }
+
+
+
+    [Fact]
+    public void ErpTab_new_customer_when_current_culture_uses_a_decimal_comma_parses_the_credit_limit_invariantly()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var cut = Render<ErpTab>();
+            cut.Find(".erp-roster-new").Click();
+
+            cut.FindAll(".erp-input")[0].Input("Hooli");
+            cut.FindAll(".erp-input")[5].Input("2500.50");
+            ByText(cut, ".erp-key", "[F2=SAVE]").Click();
+
+            var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0006"));
+            Assert.Equal(2500.50m, saved.CreditLim);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
 
