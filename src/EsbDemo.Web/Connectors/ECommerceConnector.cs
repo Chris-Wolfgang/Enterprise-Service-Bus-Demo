@@ -25,10 +25,11 @@ public sealed class ECommerceConnector
     /// </summary>
     /// <param name="monitor">The bus monitor that delivers messages to the eCommerce system.</param>
     /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the eCommerce database.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> or <paramref name="scopeFactory"/> is <see langword="null"/>.</exception>
     public ECommerceConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
     {
         ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(scopeFactory);
         _monitor = monitor;
         _scopeFactory = scopeFactory;
         monitor.RegisterHandler("eCommerce", HandleInboundAsync);
