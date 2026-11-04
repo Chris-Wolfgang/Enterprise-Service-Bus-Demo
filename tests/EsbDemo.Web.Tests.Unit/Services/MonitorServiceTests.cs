@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using EsbDemo.Web.Models;
 using EsbDemo.Web.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EsbDemo.Web.Tests.Unit.Services;
@@ -586,5 +588,62 @@ public sealed class MonitorServiceTests
         Assert.Equal("New Co", account.Fields["Name"]);
         Assert.Equal("Active", sut.Accounts[0].Status);
         Assert.Equal("Renamed Co", sut.Accounts[0].Fields["Name"]);
+    }
+
+
+    [Fact]
+    public async Task Publish_when_a_handler_throws_synchronously_still_delivers_to_the_other_subscribers_and_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var warehouseCalls = 0;
+        sut.RegisterHandler("CRM", (_, _) => throw new InvalidOperationException("CRM is broken"));
+        sut.RegisterHandler("Data Warehouse", (_, _) => { warehouseCalls++; return Task.CompletedTask; });
+
+        sut.Publish("account.created", "Tester", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        Assert.Equal(1, warehouseCalls);
+        await TestConfig.WaitUntilAsync(() => logger.Collector.Count > 0);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.IsType<InvalidOperationException>(record.Exception);
+        Assert.Contains("CRM handler for account.created", record.Message, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task SetOnline_when_a_flushed_handler_faults_asynchronously_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        sut.RegisterHandler("ERP", (_, _) => Task.FromException(new InvalidOperationException("ERP save failed")));
+        sut.SetOnline("ERP", online: false);
+        sut.Publish("account.updated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        sut.SetOnline("ERP", online: true);
+
+        await TestConfig.WaitUntilAsync(() => logger.Collector.Count > 0);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal("ERP save failed", record.Exception?.Message);
+        Assert.Contains("ERP handler for account.updated", record.Message, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task Publish_when_account_create_repeats_a_correlation_id_times_out_once_for_the_latest_request()
+    {
+        var (sut, time) = await CreateAsync();
+        sut.SetOnline("ERP", online: false);
+        sut.Publish("account.create", "CRM", "corr-1", Fields(("Name", "First")), isUserInitiated: true);
+        sut.Publish("account.create", "eCommerce", "corr-1", Fields(("Name", "Second")), isUserInitiated: true);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
+
+        var timeout = Assert.Single(sut.Entries, e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
+        Assert.Equal("eCommerce", timeout.AppName);
+        Assert.Equal("Second", Assert.Single(sut.Accounts).Fields["Name"]);
     }
 }
