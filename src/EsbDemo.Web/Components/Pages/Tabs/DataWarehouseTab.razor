@@ -51,7 +51,7 @@
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        _customers = await Db.Customers.OrderBy(c => c.CustNum).ToListAsync();
+        _customers = await Db.Customers.AsNoTracking().OrderBy(c => c.CustNum).ToListAsync();
         Connector.DataChanged += OnDataChanged;
     }
 

@@ -13,6 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ConfigService>();
 builder.Services.AddSingleton<MonitorService>();
 builder.Services.AddSingleton<CrmConnector>();

@@ -233,11 +233,29 @@ public sealed class TabTests : ComponentTestBase
         Monitor.Publish("account.updated", "Tester", "u-1", Fields(("CustomerId", "CUST0002"), ("Name", "Globex From Bus")));
 
         cut.WaitForAssertion(() => Assert.Contains("Globex From Bus", cut.Find(".erp-roster").TextContent, StringComparison.Ordinal));
-        cut.WaitForAssertion
-        (
-            () => Assert.NotEqual(firstClock, cut.FindAll(".erp-trow-dim")[0].TextContent),
-            TimeSpan.FromSeconds(5)
-        );
+        Time.Advance(TimeSpan.FromSeconds(1));
+        cut.WaitForAssertion(() => Assert.NotEqual(firstClock, cut.FindAll(".erp-trow-dim")[0].TextContent));
+    }
+
+
+
+    [Fact]
+    public async Task ErpTab_new_customer_when_the_next_number_is_taken_skips_to_a_free_one()
+    {
+        using (var scope = Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ErpDbContext>();
+            db.CustMast.Add(new CustMast { CustNum = "CUST0007", Name = "Minted By The Bus" });
+            await db.SaveChangesAsync();
+        }
+
+        var cut = Render<ErpTab>();
+        cut.Find(".erp-roster-new").Click();
+        cut.FindAll(".erp-input")[0].Input("Hooli");
+        ByText(cut, ".erp-key", "[F2=SAVE]").Click();
+
+        var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0008"));
+        Assert.Equal("Hooli", saved.Name);
     }
 
 
