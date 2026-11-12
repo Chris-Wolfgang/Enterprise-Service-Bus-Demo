@@ -13,7 +13,8 @@ namespace EsbDemo.Web.Connectors;
 public sealed class ErpConnector
 {
     private readonly MonitorService _monitor;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDbContextFactory<ErpDbContext> _dbFactory;
+    private readonly TimeProvider _timeProvider;
 
 
     /// <summary>Fired after an inbound ESB message updates the ERP database.</summary>
@@ -25,13 +26,19 @@ public sealed class ErpConnector
     /// with <paramref name="monitor"/> under the app name <c>ERP</c>.
     /// </summary>
     /// <param name="monitor">The bus monitor that delivers messages to the ERP system.</param>
-    /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the ERP database.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
-    public ErpConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
+    /// <param name="dbFactory">Creates the short-lived context each inbound message uses to reach the ERP database.</param>
+    /// <param name="timeProvider">The clock that stamps the rows an inbound message creates or changes.</param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="monitor"/>, <paramref name="dbFactory"/> or <paramref name="timeProvider"/> is <see langword="null"/>.
+    /// </exception>
+    public ErpConnector(MonitorService monitor, IDbContextFactory<ErpDbContext> dbFactory, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(dbFactory);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         _monitor = monitor;
-        _scopeFactory = scopeFactory;
+        _dbFactory = dbFactory;
+        _timeProvider = timeProvider;
         monitor.RegisterHandler("ERP", HandleInboundAsync);
     }
 
@@ -113,9 +120,8 @@ public sealed class ErpConnector
         if (!fields.TryGetValue("CustomerId", out var customerId) || string.IsNullOrEmpty(customerId))
             return;
 
-        var scope = _scopeFactory.CreateAsyncScope();
-        await using var scopeDisposal = scope.ConfigureAwait(false);
-        var db = scope.ServiceProvider.GetRequiredService<ErpDbContext>();
+        var db = await _dbFactory.CreateDbContextAsync().ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         // ERP identifies customers by CustNum, which equals the ESB's CustomerId
         var cust = await db.CustMast.FirstOrDefaultAsync(
@@ -137,15 +143,15 @@ public sealed class ErpConnector
             if (fields.TryGetValue("Name",  out var name))  cust.Name  = name;
             if (fields.TryGetValue("Email", out var email)) cust.Email = email;
             if (fields.TryGetValue("Phone", out var phone)) cust.Phone = phone;
-            cust.ModDate = DateTime.UtcNow;
+            cust.ModDate = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
         else if (string.Equals(topic, "account.deactivated", StringComparison.Ordinal))
         {
             // ESB account.deactivated → ERP sets ClosedDate (their way of marking inactive)
-            cust.ClosedDate = DateTime.UtcNow;
-            cust.ModDate    = DateTime.UtcNow;
+            cust.ClosedDate = _timeProvider.GetUtcNow().UtcDateTime;
+            cust.ModDate    = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -153,7 +159,7 @@ public sealed class ErpConnector
         {
             // ESB account.activated → ERP clears ClosedDate (their way of marking active)
             cust.ClosedDate = null;
-            cust.ModDate    = DateTime.UtcNow;
+            cust.ModDate    = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -172,8 +178,8 @@ public sealed class ErpConnector
             Name    = name ?? customerId,
             Email   = email,
             Phone   = phone,
-            AddDate = DateTime.UtcNow,
-            ModDate = DateTime.UtcNow
+            AddDate = _timeProvider.GetUtcNow().UtcDateTime,
+            ModDate = _timeProvider.GetUtcNow().UtcDateTime
         };
         await db.CustMast.AddAsync(cust).ConfigureAwait(false);
         await db.SaveChangesAsync().ConfigureAwait(false);

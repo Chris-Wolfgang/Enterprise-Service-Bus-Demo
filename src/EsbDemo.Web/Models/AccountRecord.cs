@@ -16,10 +16,12 @@ public sealed class AccountRecord
     public required string CorrelationId { get; init; }
 
 
+
     /// <summary>
     /// Gets the name of the app that requested the account; empty when unknown.
     /// </summary>
     public required string SourceApp { get; init; }
+
 
 
     /// <summary>
@@ -28,10 +30,12 @@ public sealed class AccountRecord
     public string? CustomerId { get; set; }
 
 
+
     /// <summary>
     /// Gets or sets the account's lifecycle status: <c>Pending</c> (the default), <c>Active</c> or <c>Pending Create Finish</c>.
     /// </summary>
     public string Status { get; set; } = "Pending";
+
 
 
     /// <summary>

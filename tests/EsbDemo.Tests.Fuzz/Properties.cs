@@ -45,7 +45,7 @@ public sealed class Properties
 
     /// <summary>A template built from literal text and placeholders in any order.</summary>
     private static readonly Gen<string> AnyTemplate =
-        Gen.OneOf(Literal, Gen.OneOfConst(Tokens)).Array[0, 8].Select(string.Concat);
+        Gen.OneOf(Literal, Gen.OneOf(Tokens)).Array[0, 8].Select(string.Concat);
 
 
 
@@ -224,7 +224,7 @@ public sealed class Properties
         var topics = config.Topics.Select(t => t.Topic).ToArray();
         var sources = config.Apps.Select(a => a.Name).Append("Tester").ToArray();
 
-        Gen.Select(Gen.OneOfConst(topics), Gen.OneOfConst(sources), AnyPayload)
+        Gen.Select(Gen.OneOf(topics), Gen.OneOf(sources), AnyPayload)
             .Sample
             (
                 (topic, source, fields) =>
