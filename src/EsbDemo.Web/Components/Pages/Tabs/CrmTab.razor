@@ -1,4 +1,5 @@
-@inject CrmDbContext Db
+@inject IDbContextFactory<CrmDbContext> DbFactory
+@inject TimeProvider Clock
 @inject CrmConnector Connector
 @implements IDisposable
 
@@ -95,7 +96,7 @@
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        _accounts = await Db.Accounts.AsNoTracking().OrderBy(a => a.AccountNumber).ToListAsync();
+        _accounts = await LoadAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
@@ -107,7 +108,7 @@
     private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
         {
-            _accounts = await Db.Accounts.AsNoTracking().OrderBy(a => a.AccountNumber).ToListAsync();
+            _accounts = await LoadAsync();
             StateHasChanged();
         });
 
@@ -130,10 +131,8 @@
         acct.Name          = _editName;
         acct.EMailAddress1 = _editEmail;
         acct.Telephone1    = _editPhone;
-        acct.ModifiedOn    = DateTime.UtcNow;
-        Db.Accounts.Update(acct);
-        await Db.SaveChangesAsync();
-        Db.ChangeTracker.Clear();
+        acct.ModifiedOn    = Clock.GetUtcNow().UtcDateTime;
+        await UpdateAsync(acct);
 
         Connector.PublishAccountUpdated(acct);
 
@@ -147,13 +146,24 @@
             : AccountStatusCode.Active;
 
         acct.StatusCode = newStatus;
-        acct.ModifiedOn = DateTime.UtcNow;
-        Db.Accounts.Update(acct);
-        await Db.SaveChangesAsync();
-        Db.ChangeTracker.Clear();
+        acct.ModifiedOn = Clock.GetUtcNow().UtcDateTime;
+        await UpdateAsync(acct);
 
         Connector.PublishStatusChanged(acct);
     }
 
     private void CancelEdit() => _editId = Guid.Empty;
+
+    private async Task<List<CrmAccount>> LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        return await db.Accounts.AsNoTracking().OrderBy(a => a.AccountNumber).ToListAsync();
+    }
+
+    private async Task UpdateAsync(CrmAccount acct)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Accounts.Update(acct);
+        await db.SaveChangesAsync();
+    }
 }

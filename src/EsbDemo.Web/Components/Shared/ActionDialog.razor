@@ -1,5 +1,6 @@
 @inject ConfigService Config
 @inject MonitorService Monitor
+@inject TimeProvider Clock
 
 @if (_isOpen)
 {
@@ -16,7 +17,8 @@
                         <label class="dialog-label">@field.Name</label>
                         @if (string.Equals(field.Type, "account", StringComparison.Ordinal))
                         {
-                            @if (!Monitor.Accounts.Any())
+                            var accounts = Monitor.Accounts;
+                            @if (accounts.Count == 0)
                             {
                                 <p class="dialog-no-customers">No customers created yet. Use Create Customer first.</p>
                             }
@@ -24,15 +26,15 @@
                             {
                                 <select class="dialog-input dialog-select" @onchange="e => OnAccountSelected(field.Name, e)">
                                     <option value="">— select a customer —</option>
-                                    @foreach (var account in Monitor.Accounts.Where(a => a.CustomerId != null))
+                                    @foreach (var account in accounts.Where(a => a.CustomerId != null))
                                     {
                                         account.Fields.TryGetValue("Name", out var aName);
                                         <option value="@account.CustomerId">@account.CustomerId — @aName</option>
                                     }
-                                    @if (Monitor.Accounts.Any(a => a.CustomerId == null))
+                                    @if (accounts.Any(a => a.CustomerId == null))
                                     {
                                         <optgroup label="Pending">
-                                            @foreach (var account in Monitor.Accounts.Where(a => a.CustomerId == null))
+                                            @foreach (var account in accounts.Where(a => a.CustomerId == null))
                                             {
                                                 account.Fields.TryGetValue("Name", out var aName);
                                                 <option value="" disabled>⏳ @aName [@account.Status]</option>
@@ -97,7 +99,7 @@
         _accountFieldName = accountField?.Name ?? string.Empty;
 
         _fields = new Dictionary<string, string>();
-        var now = DateTimeOffset.UtcNow;
+        var now = Clock.GetUtcNow();
 
         foreach (var field in _topicFields.Where(f => !string.Equals(f.Type, "account", StringComparison.Ordinal)))
         {
