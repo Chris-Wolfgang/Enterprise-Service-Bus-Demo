@@ -587,4 +587,20 @@ public sealed class MonitorServiceTests
         Assert.Equal("Active", sut.Accounts[0].Status);
         Assert.Equal("Renamed Co", sut.Accounts[0].Fields["Name"]);
     }
+
+
+
+    [Fact]
+    public async Task Publish_when_the_log_is_full_drops_the_oldest_entries()
+    {
+        var (sut, _) = await CreateAsync();
+
+        for (var i = 0; i <= MonitorService.MaxEntries; i++)
+            sut.Publish("no.subscribers", "Tester", null, Fields(("N", i.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+
+        var entries = sut.Entries;
+        Assert.Equal(MonitorService.MaxEntries, entries.Count);
+        Assert.Equal("N: 1", entries[0].Summary);
+        Assert.Equal("N: " + MonitorService.MaxEntries.ToString(System.Globalization.CultureInfo.InvariantCulture), entries[^1].Summary);
+    }
 }
