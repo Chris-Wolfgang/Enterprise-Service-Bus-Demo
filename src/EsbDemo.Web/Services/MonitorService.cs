@@ -334,7 +334,8 @@ public sealed partial class MonitorService
 
         var cts = new CancellationTokenSource();
         _pendingCreateCts[correlationId] = cts;
-        Observe(WatchAccountCreateTimeoutAsync(correlationId, cts.Token), "account.create timeout");
+        var token = cts.Token;
+        Observe(() => WatchAccountCreateTimeoutAsync(correlationId, token), "account.create timeout");
     }
 
 
@@ -529,7 +530,7 @@ public sealed partial class MonitorService
         {
             Observe
             (
-                PublishAutoResponseAsync(autoResponse.Publish, app.Name, correlationId, fields, originalSourceApp),
+                () => PublishAutoResponseAsync(autoResponse.Publish, app.Name, correlationId, fields, originalSourceApp),
                 $"{app.Name} auto-response {autoResponse.Publish}"
             );
         }
@@ -651,12 +652,12 @@ public sealed partial class MonitorService
     }
 
 
-    // Called after the bus lock is released, so a connector's synchronous work (scope creation, the
+    // Called after the bus lock is released, so a connector's synchronous work (context creation, the
     // first EF call) never runs under the lock, and one handler's fault cannot stop the others.
     private void InvokeHandlers(List<HandlerCall> handlerCalls)
     {
         foreach (var call in handlerCalls)
-            Observe(InvokeHandlerAsync(call), $"{call.AppName} handler for {call.Topic}");
+            Observe(() => call.Handler(call.Topic, call.Fields), $"{call.AppName} handler for {call.Topic}");
     }
 
 
@@ -672,25 +673,18 @@ public sealed partial class MonitorService
 
 
 
-    // The async wrapper is the point: it turns a handler's synchronous throw into a faulted task, so
-    // returning the handler's task directly (what AsyncFixer01 suggests) would let the throw escape.
-#pragma warning disable AsyncFixer01
-    private static async Task InvokeHandlerAsync(HandlerCall call) =>
-        await call.Handler(call.Topic, call.Fields).ConfigureAwait(false);
-#pragma warning restore AsyncFixer01
+    // Starts the work inside the try, so a synchronous throw from it is logged the same way as a
+    // faulted task, and the awaited task is always one this method started.
+    private void Observe(Func<Task> start, string operation) =>
+        _ = ObserveAsync(start, operation);
 
 
 
-    private void Observe(Task task, string operation) =>
-        _ = ObserveAsync(task, operation);
-
-
-
-    private async Task ObserveAsync(Task task, string operation)
+    private async Task ObserveAsync(Func<Task> start, string operation)
     {
         try
         {
-            await task.ConfigureAwait(false);
+            await start().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
