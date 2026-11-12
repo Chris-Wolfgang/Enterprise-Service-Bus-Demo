@@ -12,7 +12,8 @@ namespace EsbDemo.Web.Connectors;
 public sealed class ECommerceConnector
 {
     private readonly MonitorService _monitor;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDbContextFactory<ECommerceDbContext> _dbFactory;
+    private readonly TimeProvider _timeProvider;
 
 
     /// <summary>Fired after an inbound ESB message updates the eCommerce database.</summary>
@@ -24,13 +25,19 @@ public sealed class ECommerceConnector
     /// with <paramref name="monitor"/> under the app name <c>eCommerce</c>.
     /// </summary>
     /// <param name="monitor">The bus monitor that delivers messages to the eCommerce system.</param>
-    /// <param name="scopeFactory">Creates the scope each inbound message uses to reach the eCommerce database.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="monitor"/> is <see langword="null"/>.</exception>
-    public ECommerceConnector(MonitorService monitor, IServiceScopeFactory scopeFactory)
+    /// <param name="dbFactory">Creates the short-lived context each inbound message uses to reach the eCommerce database.</param>
+    /// <param name="timeProvider">The clock that stamps the rows an inbound message creates or changes.</param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="monitor"/>, <paramref name="dbFactory"/> or <paramref name="timeProvider"/> is <see langword="null"/>.
+    /// </exception>
+    public ECommerceConnector(MonitorService monitor, IDbContextFactory<ECommerceDbContext> dbFactory, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(dbFactory);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         _monitor = monitor;
-        _scopeFactory = scopeFactory;
+        _dbFactory = dbFactory;
+        _timeProvider = timeProvider;
         monitor.RegisterHandler("eCommerce", HandleInboundAsync);
     }
 
@@ -63,9 +70,8 @@ public sealed class ECommerceConnector
         if (!fields.TryGetValue("CustomerId", out var custNum) || string.IsNullOrEmpty(custNum))
             return;
 
-        var scope = _scopeFactory.CreateAsyncScope();
-        await using var scopeDisposal = scope.ConfigureAwait(false);
-        var db = scope.ServiceProvider.GetRequiredService<ECommerceDbContext>();
+        var db = await _dbFactory.CreateDbContextAsync().ConfigureAwait(false);
+        await using var dbDisposal = db.ConfigureAwait(false);
 
         var cust = await db.Customers.FirstOrDefaultAsync(
             c => c.CustNum == custNum
@@ -86,7 +92,7 @@ public sealed class ECommerceConnector
                     Email       = email,
                     Phone       = phone,
                     IsActive    = true,
-                    CreatedDate = DateTime.UtcNow
+                    CreatedDate = _timeProvider.GetUtcNow().UtcDateTime
                 }).ConfigureAwait(false);
                 await db.SaveChangesAsync().ConfigureAwait(false);
                 DataChanged?.Invoke(this, EventArgs.Empty);

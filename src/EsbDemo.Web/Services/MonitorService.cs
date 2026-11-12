@@ -25,6 +25,9 @@ public sealed partial class MonitorService
     // auto-response and timeout tasks call in from the thread pool, so all access is serialized.
     private readonly Lock _gate = new();
 
+    /// <summary>The most entries the log keeps; older ones are dropped first.</summary>
+    internal const int MaxEntries = 500;
+
     private readonly List<MonitorEntry> _entries = new();
     private readonly Dictionary<string, bool> _onlineStatus = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Queue<QueuedMessage>> _queued = new(StringComparer.OrdinalIgnoreCase);
@@ -280,7 +283,7 @@ public sealed partial class MonitorService
             var summary = BuildSummary(fields);
             var cssClass = _config.GetTopicCssClass(topic);
 
-            _entries.Add(
+            AddEntry(
                 new MonitorEntry
                 {
                     Timestamp = now,
@@ -449,7 +452,7 @@ public sealed partial class MonitorService
 
         if (IsOnlineCore(app.Name))
         {
-            _entries.Add(recvEntry);
+            AddEntry(recvEntry);
 
             if (!isSelfOrigin)
             {
@@ -482,7 +485,7 @@ public sealed partial class MonitorService
         var cssClass = _config.GetTopicCssClass(msg.Topic);
         var summary = BuildReceiverSummary(appName, msg.Topic, msg.Fields) ?? BuildSummary(msg.Fields);
 
-        _entries.Add(
+        AddEntry(
             new MonitorEntry
             {
                 Timestamp = msg.Timestamp,
@@ -547,7 +550,7 @@ public sealed partial class MonitorService
                 {
                     record.Status = "Pending Create Finish";
 
-                    _entries.Add(
+                    AddEntry(
                         new MonitorEntry
                         {
                             Timestamp = _timeProvider.GetUtcNow(),
@@ -654,6 +657,17 @@ public sealed partial class MonitorService
     {
         foreach (var call in handlerCalls)
             Observe(InvokeHandlerAsync(call), $"{call.AppName} handler for {call.Topic}");
+    }
+
+
+
+    // Caller holds _gate. Keeps the singleton log bounded for a long-running demo.
+    private void AddEntry(MonitorEntry entry)
+    {
+        _entries.Add(entry);
+
+        if (_entries.Count > MaxEntries)
+            _entries.RemoveRange(0, _entries.Count - MaxEntries);
     }
 
 
