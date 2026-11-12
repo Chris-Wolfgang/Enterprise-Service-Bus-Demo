@@ -3,19 +3,22 @@
 
 @foreach (var app in Config.Apps.OrderBy(a => a.DisplayOrder))
 {
+    // One read per app per render: IsOnline takes the bus lock.
+    var isOnline = Monitor.IsOnline(app.Name);
     <div class="app-card">
         <div class="app-header">
-            <span class="app-status-dot @(Monitor.IsOnline(app.Name) ? "online" : "offline")"></span>
+            <span class="app-status-dot @(isOnline ? "online" : "offline")"></span>
             <span class="app-name">@app.Name</span>
-            <button class="btn-toggle @(Monitor.IsOnline(app.Name) ? "btn-toggle-online" : "btn-toggle-offline")"
+            <button class="btn-toggle @(isOnline ? "btn-toggle-online" : "btn-toggle-offline")"
                     @onclick="() => ToggleOnline(app.Name)">
-                @(Monitor.IsOnline(app.Name) ? "Online" : "Offline")
+                @(isOnline ? "Online" : "Offline")
             </button>
         </div>
 
-        @if (!Monitor.IsOnline(app.Name) && Monitor.GetQueuedCount(app.Name) > 0)
+        @{ var queued = isOnline ? 0 : Monitor.GetQueuedCount(app.Name); }
+        @if (queued > 0)
         {
-            <div class="queued-badge">@Monitor.GetQueuedCount(app.Name) queued</div>
+            <div class="queued-badge">@queued queued</div>
         }
 
         @foreach (var topic in app.Publishes)
@@ -24,7 +27,7 @@
             var capturedTopic = topic;
             var capturedApp = app.Name;
             <button class="btn-action"
-                    disabled="@(!Monitor.IsOnline(app.Name))"
+                    disabled="@(!isOnline)"
                     @onclick="() => OpenDialog(capturedTopic, capturedApp)">
                 @topicLabel
             </button>
