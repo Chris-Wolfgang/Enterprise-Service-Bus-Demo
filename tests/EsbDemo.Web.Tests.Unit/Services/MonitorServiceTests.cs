@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using EsbDemo.Web.Models;
 using EsbDemo.Web.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EsbDemo.Web.Tests.Unit.Services;
@@ -18,7 +20,7 @@ public sealed class MonitorServiceTests
     private static async Task<(MonitorService Sut, FakeTimeProvider Time)> CreateAsync()
     {
         var time = new FakeTimeProvider();
-        return (new MonitorService(await TestConfig.LoadRealAsync(), time), time);
+        return (new MonitorService(await ShippedConfig.LoadAsync(), time), time);
     }
 
 
@@ -39,7 +41,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public void MonitorService_public_constructor_uses_the_system_clock_and_the_mock_bus()
+    public void MonitorService_public_constructor_when_called_uses_the_system_clock_and_the_mock_bus()
     {
         var sut = new MonitorService(new ConfigService(new FakeWebHostEnvironment(AppContext.BaseDirectory)));
 
@@ -100,7 +102,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_logs_one_send_entry_and_one_receive_entry_per_subscriber()
+    public async Task Publish_when_a_topic_has_subscribers_logs_one_send_entry_and_one_receive_entry_per_subscriber()
     {
         var (sut, time) = await CreateAsync();
 
@@ -152,7 +154,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_raises_OnChanged()
+    public async Task Publish_when_called_raises_OnChanged()
     {
         var (sut, _) = await CreateAsync();
         var raised = 0;
@@ -167,7 +169,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_passes_each_subscriber_handler_its_own_copy_and_skips_the_source()
+    public async Task Publish_when_a_topic_has_subscribers_passes_each_handler_its_own_copy_and_skips_the_source()
     {
         var (sut, _) = await CreateAsync();
         var fields = Fields(("CustomerId", "CUST0001"), ("Name", "Acme"));
@@ -250,7 +252,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task SetOnline_marks_only_the_deliveries_that_waited_in_the_queue_as_queued()
+    public async Task SetOnline_when_an_app_comes_back_marks_only_the_deliveries_that_waited_in_the_queue_as_queued()
     {
         var (sut, _) = await CreateAsync();
         sut.SetOnline("ERP", online: false);
@@ -295,7 +297,7 @@ public sealed class MonitorServiceTests
         Assert.Equal("CRM", pending.SourceApp);
         Assert.Null(pending.CustomerId);
 
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
         var reply = Sent(sut, "account.created")[0];
@@ -307,7 +309,7 @@ public sealed class MonitorServiceTests
         Assert.Matches(CustomerIdPattern, account.CustomerId);
         Assert.Equal("Acme Corp 7", account.Fields["Name"]);
 
-        time.Advance(TimeSpan.FromSeconds(10));
+        time.Advance(MonitorService.AccountCreateTimeout);
         Assert.DoesNotContain(sut.Entries, e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
     }
 
@@ -322,7 +324,7 @@ public sealed class MonitorServiceTests
         var raised = 0;
         sut.OnChanged += (_, _) => raised++;
 
-        time.Advance(TimeSpan.FromSeconds(10));
+        time.Advance(MonitorService.AccountCreateTimeout);
         await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
 
         var timeout = sut.Entries.Single(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
@@ -332,7 +334,7 @@ public sealed class MonitorServiceTests
         Assert.Equal(1, raised);
 
         sut.SetOnline("ERP", online: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => string.Equals(sut.Accounts.Single().Status, "Active", StringComparison.Ordinal));
     }
 
@@ -371,7 +373,7 @@ public sealed class MonitorServiceTests
         sut.Publish("account.create", "ERP", "erp-corr", Fields(("Name", "Own")), isUserInitiated: true);
 
         sut.SetOnline("ERP", online: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
         var reply = Sent(sut, "account.created")[0];
@@ -394,7 +396,7 @@ public sealed class MonitorServiceTests
             Fields(("CustomerId", "CUST0001"), ("OrderRef", "ORD-1234"), ("Amount", "$1,230.00")),
             isUserInitiated: true
         );
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "order.placed").Length == 1);
 
         var reply = Sent(sut, "order.placed")[0];
@@ -424,7 +426,7 @@ public sealed class MonitorServiceTests
 
         sut.Publish("ping", "Tester", "p-1", Fields(("A", "1")), isUserInitiated: true);
         sut.Publish("ping2", "Tester", "p-2", Fields(("A", "2")), isUserInitiated: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "pong").Length == 1);
 
         Assert.Single(Sent(sut, "ping"));
@@ -450,7 +452,7 @@ public sealed class MonitorServiceTests
         );
 
         sut.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme")), isUserInitiated: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
         Assert.Equal(new[] { ("account.create", false), ("account.created", false) }, seen);
@@ -551,7 +553,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task SetBus_resets_the_log_accounts_queues_and_pending_timeouts()
+    public async Task SetBus_when_called_resets_the_log_accounts_queues_and_pending_timeouts()
     {
         var (sut, time) = await CreateAsync();
         sut.SetOnline("ERP", online: false);
@@ -560,7 +562,7 @@ public sealed class MonitorServiceTests
         sut.OnChanged += (_, _) => raised++;
 
         sut.SetBus("Kafka");
-        time.Advance(TimeSpan.FromSeconds(10));
+        time.Advance(MonitorService.AccountCreateTimeout);
 
         Assert.Equal("Kafka", sut.SelectedBus);
         Assert.Empty(sut.Entries);
@@ -572,7 +574,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Entries_and_Accounts_return_snapshots_that_later_activity_does_not_change()
+    public async Task Entries_and_Accounts_when_activity_follows_return_snapshots_that_do_not_change()
     {
         var (sut, _) = await CreateAsync();
         sut.Publish("account.created", "ERP", "CUST0099", Fields(("CustomerId", "CUST0099"), ("Name", "New Co")));
@@ -582,9 +584,102 @@ public sealed class MonitorServiceTests
         sut.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0099"), ("Name", "Renamed Co")));
         account.Status = "Changed by caller";
 
+        // 1 send + 4 subscribers of account.created (CRM, eCommerce, Customer Portal, Data Warehouse).
         Assert.Equal(5, entries.Count);
         Assert.Equal("New Co", account.Fields["Name"]);
         Assert.Equal("Active", sut.Accounts[0].Status);
         Assert.Equal("Renamed Co", sut.Accounts[0].Fields["Name"]);
+    }
+
+
+    [Fact]
+    public async Task Publish_when_a_handler_throws_synchronously_still_delivers_to_the_other_subscribers_and_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var warehouseCalls = 0;
+        sut.RegisterHandler("CRM", (_, _) => throw new InvalidOperationException("CRM is broken"));
+        sut.RegisterHandler("Data Warehouse", (_, _) => { warehouseCalls++; return Task.CompletedTask; });
+
+        sut.Publish("account.created", "Tester", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        Assert.Equal(1, warehouseCalls);
+        await TestConfig.WaitUntilAsync(() => logger.Collector.Count > 0);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.IsType<InvalidOperationException>(record.Exception);
+        Assert.Contains("CRM handler for account.created", record.Message, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task Publish_when_an_OnChanged_subscriber_throws_still_notifies_the_others_and_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var laterCalls = 0;
+        sut.OnChanged += (_, _) => throw new InvalidOperationException("UI is broken");
+        sut.OnChanged += (_, _) => laterCalls++;
+
+        sut.Publish("account.activated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        Assert.Equal(1, laterCalls);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.Equal("UI is broken", record.Exception?.Message);
+    }
+
+
+
+    [Fact]
+    public async Task SetOnline_when_a_flushed_handler_faults_asynchronously_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        sut.RegisterHandler("ERP", (_, _) => Task.FromException(new InvalidOperationException("ERP save failed")));
+        sut.SetOnline("ERP", online: false);
+        sut.Publish("account.updated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        sut.SetOnline("ERP", online: true);
+
+        await TestConfig.WaitUntilAsync(() => logger.Collector.Count > 0);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal("ERP save failed", record.Exception?.Message);
+        Assert.Contains("ERP handler for account.updated", record.Message, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task Publish_when_account_create_repeats_a_correlation_id_times_out_once_for_the_latest_request()
+    {
+        var (sut, time) = await CreateAsync();
+        sut.SetOnline("ERP", online: false);
+        sut.Publish("account.create", "CRM", "corr-1", Fields(("Name", "First")), isUserInitiated: true);
+        sut.Publish("account.create", "eCommerce", "corr-1", Fields(("Name", "Second")), isUserInitiated: true);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
+
+        var timeout = Assert.Single(sut.Entries, e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
+        Assert.Equal("eCommerce", timeout.AppName);
+        Assert.Equal("Second", Assert.Single(sut.Accounts).Fields["Name"]);
+    }
+
+
+
+    [Fact]
+    public async Task Publish_when_the_log_is_full_drops_the_oldest_entries()
+    {
+        var (sut, _) = await CreateAsync();
+
+        for (var i = 0; i <= MonitorService.MaxEntries; i++)
+            sut.Publish("no.subscribers", "Tester", null, Fields(("N", i.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+
+        var entries = sut.Entries;
+        Assert.Equal(MonitorService.MaxEntries, entries.Count);
+        Assert.Equal("N: 1", entries[0].Summary);
+        Assert.Equal("N: " + MonitorService.MaxEntries.ToString(System.Globalization.CultureInfo.InvariantCulture), entries[^1].Summary);
     }
 }

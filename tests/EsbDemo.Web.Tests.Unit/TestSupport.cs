@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using EsbDemo.Web.Connectors;
 using EsbDemo.Web.Data.Crm;
 using EsbDemo.Web.Data.CustomerPortal;
@@ -7,72 +6,31 @@ using EsbDemo.Web.Data.ECommerce;
 using EsbDemo.Web.Data.Erp;
 using EsbDemo.Web.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EsbDemo.Web.Tests.Unit;
 
-/// <summary>A host environment whose content root is a chosen folder.</summary>
-[ExcludeFromCodeCoverage]
-internal sealed class FakeWebHostEnvironment : IWebHostEnvironment
-{
-    public FakeWebHostEnvironment(string contentRootPath)
-    {
-        ContentRootPath = contentRootPath;
-    }
-
-
-
-    public string ContentRootPath { get; set; }
-
-
-
-    public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-
-
-
-    public string ApplicationName { get; set; } = "EsbDemo.Web";
-
-
-
-    public string EnvironmentName { get; set; } = "Development";
-
-
-
-    public string WebRootPath { get; set; } = string.Empty;
-
-
-
-    public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
-}
-
-
-
 internal static class TestConfig
 {
-    /// <summary>Loads the app's real config/apps.json and config/topics.json, copied to the test output.</summary>
-    public static async Task<ConfigService> LoadRealAsync()
-    {
-        var config = new ConfigService(new FakeWebHostEnvironment(AppContext.BaseDirectory));
-        await config.LoadAsync();
-        return config;
-    }
-
-
-
     /// <summary>Writes the given JSON as config/apps.json and config/topics.json in a new folder and loads it.</summary>
     public static async Task<ConfigService> LoadAsync(string appsJson, string topicsJson)
     {
         var root = Path.Combine(Path.GetTempPath(), "esb-tests-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "config"));
-        await File.WriteAllTextAsync(Path.Combine(root, "config", "apps.json"), appsJson);
-        await File.WriteAllTextAsync(Path.Combine(root, "config", "topics.json"), topicsJson);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "config"));
+            await File.WriteAllTextAsync(Path.Combine(root, "config", "apps.json"), appsJson);
+            await File.WriteAllTextAsync(Path.Combine(root, "config", "topics.json"), topicsJson);
 
-        var config = new ConfigService(new FakeWebHostEnvironment(root));
-        await config.LoadAsync();
-
-        Directory.Delete(root, recursive: true);
-        return config;
+            var config = new ConfigService(new FakeWebHostEnvironment(root));
+            await config.LoadAsync();
+            return config;
+        }
+        finally
+        {
+            // Also on failure, so a config that does not load does not leak the folder.
+            Directory.Delete(root, recursive: true);
+        }
     }
 
 
@@ -103,11 +61,11 @@ internal sealed class ConnectorHarness : IDisposable
         _services = services;
         Monitor = monitor;
         Time = time;
-        Crm = new CrmConnector(monitor, ScopeFactory);
-        Erp = new ErpConnector(monitor, ScopeFactory);
-        ECommerce = new ECommerceConnector(monitor, ScopeFactory);
-        Portal = new CustomerPortalConnector(monitor, ScopeFactory);
-        Warehouse = new DataWarehouseConnector(monitor, ScopeFactory);
+        Crm = new CrmConnector(monitor, Factory<CrmDbContext>(), time);
+        Erp = new ErpConnector(monitor, Factory<ErpDbContext>(), time);
+        ECommerce = new ECommerceConnector(monitor, Factory<ECommerceDbContext>(), time);
+        Portal = new CustomerPortalConnector(monitor, Factory<CustomerPortalDbContext>(), time);
+        Warehouse = new DataWarehouseConnector(monitor, Factory<DataWarehouseDbContext>(), time);
     }
 
 
@@ -120,7 +78,9 @@ internal sealed class ConnectorHarness : IDisposable
 
 
 
-    public IServiceScopeFactory ScopeFactory => _services.GetRequiredService<IServiceScopeFactory>();
+    public IDbContextFactory<TContext> Factory<TContext>()
+        where TContext : DbContext =>
+        _services.GetRequiredService<IDbContextFactory<TContext>>();
 
 
 
@@ -148,11 +108,11 @@ internal sealed class ConnectorHarness : IDisposable
     {
         var suffix = Guid.NewGuid().ToString("N");
         var services = new ServiceCollection()
-            .AddDbContext<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix))
-            .AddDbContext<ErpDbContext>(o => o.UseInMemoryDatabase("ERP-" + suffix))
-            .AddDbContext<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce-" + suffix))
-            .AddDbContext<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("Portal-" + suffix))
-            .AddDbContext<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DW-" + suffix))
+            .AddDbContextFactory<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix))
+            .AddDbContextFactory<ErpDbContext>(o => o.UseInMemoryDatabase("ERP-" + suffix))
+            .AddDbContextFactory<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce-" + suffix))
+            .AddDbContextFactory<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("Portal-" + suffix))
+            .AddDbContextFactory<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DW-" + suffix))
             .BuildServiceProvider();
 
         using (var scope = services.CreateScope())
@@ -165,7 +125,7 @@ internal sealed class ConnectorHarness : IDisposable
         }
 
         var time = new FakeTimeProvider();
-        var monitor = new MonitorService(await TestConfig.LoadRealAsync(), time);
+        var monitor = new MonitorService(await ShippedConfig.LoadAsync(), time);
         return new ConnectorHarness(services, monitor, time);
     }
 

@@ -7,7 +7,7 @@ namespace EsbDemo.Web.Tests.Unit;
 public sealed class ProgramTests
 {
     [Fact]
-    public async Task Host_in_development_serves_the_prerendered_home_page()
+    public async Task Host_when_in_development_serves_the_prerendered_home_page()
     {
         await using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
@@ -39,7 +39,7 @@ public sealed class ProgramTests
 
 
     [Fact]
-    public async Task Host_in_production_serves_the_home_page_and_the_error_page()
+    public async Task Host_when_in_production_serves_the_home_page_and_the_error_page()
     {
         await using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b => b.UseEnvironment("Production"));

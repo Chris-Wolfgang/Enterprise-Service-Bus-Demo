@@ -50,9 +50,9 @@ public sealed class PlaceholderResolverTests
     [Fact]
     public void Resolve_when_template_has_date_and_time_placeholders_formats_now()
     {
-        var expected = Now.ToString("yyyy-MM-dd", CultureInfo.CurrentCulture)
+        var expected = Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
             + " "
-            + Now.ToString("HH:mm", CultureInfo.CurrentCulture);
+            + Now.ToString("HH:mm", CultureInfo.InvariantCulture);
 
         var actual = PlaceholderResolver.Resolve("{yyyy-MM-dd} {hh:mm}", Now, new Random(1));
 
@@ -62,30 +62,27 @@ public sealed class PlaceholderResolverTests
 
 
     [Fact]
-    public void Resolve_when_template_has_four_digit_placeholder_uses_the_next_number_from_1000_to_9998()
+    public void Resolve_when_template_has_four_digit_placeholder_uses_the_next_number_from_1000_to_9999()
     {
-        var expected = new Random(42).Next(1000, 9999);
+        var expected = new Random(42).Next(1000, 10000);
 
         var actual = PlaceholderResolver.Resolve("CUST{####}", Now, new Random(42));
 
-        Assert.Equal("CUST" + expected.ToString(CultureInfo.CurrentCulture), actual);
+        Assert.Equal("CUST" + expected.ToString(CultureInfo.InvariantCulture), actual);
     }
 
 
 
     [Fact]
-    public void Resolve_when_template_has_two_digit_placeholder_uses_a_number_from_10_to_98()
+    public void Resolve_when_template_has_two_digit_placeholder_uses_the_first_number_from_10_to_99()
     {
-        // Resolve always draws the four-digit value first, even when the template has no {####},
-        // so {##} receives the second number from the generator.
-        var random = new Random(7);
-        _ = random.Next(1000, 9999);
-        var expected = random.Next(10, 99);
+        // Without {####} no four-digit value is drawn, so {##} receives the generator's first number.
+        var expected = new Random(7).Next(10, 100);
 
         var actual = PlaceholderResolver.Resolve("Acme Corp {##}", Now, new Random(7));
 
-        Assert.Equal("Acme Corp " + expected.ToString(CultureInfo.CurrentCulture), actual);
-        Assert.InRange(expected, 10, 98);
+        Assert.Equal("Acme Corp " + expected.ToString(CultureInfo.InvariantCulture), actual);
+        Assert.InRange(expected, 10, 99);
     }
 
 
@@ -105,15 +102,35 @@ public sealed class PlaceholderResolverTests
     public void Resolve_when_both_number_placeholders_are_present_resolves_four_digits_before_two()
     {
         var random = new Random(11);
-        var expectedFour = random.Next(1000, 9999);
-        var expectedTwo = random.Next(10, 99);
+        var expectedFour = random.Next(1000, 10000);
+        var expectedTwo = random.Next(10, 100);
 
         var actual = PlaceholderResolver.Resolve("{####}/{##}", Now, new Random(11));
 
         Assert.Equal
         (
-            expectedFour.ToString(CultureInfo.CurrentCulture) + "/" + expectedTwo.ToString(CultureInfo.CurrentCulture),
+            expectedFour.ToString(CultureInfo.InvariantCulture) + "/" + expectedTwo.ToString(CultureInfo.InvariantCulture),
             actual
         );
+    }
+
+
+    [Fact]
+    public void Resolve_when_current_culture_uses_a_non_Gregorian_calendar_still_formats_a_Gregorian_date()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            // th-TH defaults to the Thai Buddhist calendar (2026 renders as 2569).
+            CultureInfo.CurrentCulture = new CultureInfo("th-TH");
+
+            var actual = PlaceholderResolver.Resolve("{yyyy-MM-dd} {hh:mm}", Now, new Random(1));
+
+            Assert.Equal("2026-03-07 14:05", actual);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 }

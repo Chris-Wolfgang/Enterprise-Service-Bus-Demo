@@ -46,8 +46,8 @@
       "modern"
     ],
     "globalMetadata": {
-      "_appName": "Wolfgang.Demo.EnterpriseServiceBus",
-      "_appTitle": "Wolfgang.Demo.EnterpriseServiceBus Documentation",
+      "_appName": "Enterprise Service Bus Demo",
+      "_appTitle": "Enterprise Service Bus Demo Documentation",
       "_appLogoPath": "logo.svg",
       "_appFaviconPath": "favicon.svg",
       "_enableSearch": true,

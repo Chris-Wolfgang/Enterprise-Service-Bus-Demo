@@ -34,17 +34,18 @@ public abstract class ComponentTestBase : BunitContext, IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        Config = await TestConfig.LoadRealAsync();
+        Config = await ShippedConfig.LoadAsync();
         Monitor = new MonitorService(Config, Time);
 
         var suffix = Guid.NewGuid().ToString("N");
+        Services.AddSingleton<TimeProvider>(Time);
         Services.AddSingleton(Config);
         Services.AddSingleton(Monitor);
-        Services.AddDbContext<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix));
-        Services.AddDbContext<ErpDbContext>(o => o.UseInMemoryDatabase("ERP-" + suffix));
-        Services.AddDbContext<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce-" + suffix));
-        Services.AddDbContext<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("Portal-" + suffix));
-        Services.AddDbContext<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DW-" + suffix));
+        Services.AddDbContextFactory<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix));
+        Services.AddDbContextFactory<ErpDbContext>(o => o.UseInMemoryDatabase("ERP-" + suffix));
+        Services.AddDbContextFactory<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce-" + suffix));
+        Services.AddDbContextFactory<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("Portal-" + suffix));
+        Services.AddDbContextFactory<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DW-" + suffix));
         Services.AddSingleton<CrmConnector>();
         Services.AddSingleton<ErpConnector>();
         Services.AddSingleton<ECommerceConnector>();

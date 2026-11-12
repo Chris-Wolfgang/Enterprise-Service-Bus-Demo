@@ -10,9 +10,11 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRazorComponents()
+builder.Services
+    .AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ConfigService>();
 builder.Services.AddSingleton<MonitorService>();
 builder.Services.AddSingleton<CrmConnector>();
@@ -21,11 +23,11 @@ builder.Services.AddSingleton<DataWarehouseConnector>();
 builder.Services.AddSingleton<ECommerceConnector>();
 builder.Services.AddSingleton<CustomerPortalConnector>();
 
-builder.Services.AddDbContext<CrmDbContext>(o => o.UseInMemoryDatabase("CRM"));
-builder.Services.AddDbContext<ErpDbContext>(o => o.UseInMemoryDatabase("ERP"));
-builder.Services.AddDbContext<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce"));
-builder.Services.AddDbContext<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("CustomerPortal"));
-builder.Services.AddDbContext<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DataWarehouse"));
+builder.Services.AddDbContextFactory<CrmDbContext>(o => o.UseInMemoryDatabase("CRM"));
+builder.Services.AddDbContextFactory<ErpDbContext>(o => o.UseInMemoryDatabase("ERP"));
+builder.Services.AddDbContextFactory<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce"));
+builder.Services.AddDbContextFactory<CustomerPortalDbContext>(o => o.UseInMemoryDatabase("CustomerPortal"));
+builder.Services.AddDbContextFactory<DataWarehouseDbContext>(o => o.UseInMemoryDatabase("DataWarehouse"));
 
 var app = builder.Build();
 
@@ -60,7 +62,8 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseHttpsRedirection();
 app.UseAntiforgery();
 app.MapStaticAssets();
-app.MapRazorComponents<App>()
+app
+    .MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 await app.RunAsync().ConfigureAwait(false);

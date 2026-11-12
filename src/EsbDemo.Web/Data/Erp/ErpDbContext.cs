@@ -14,6 +14,7 @@ public sealed class ErpDbContext(DbContextOptions<ErpDbContext> options) : DbCon
     public DbSet<CustMast> CustMast => Set<CustMast>();
 
 
+
     /// <summary>
     /// Configures the model and seeds the ERP system's demo customers.
     /// </summary>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Bunit;
 using EsbDemo.Web.Components.Pages.Tabs;
 using EsbDemo.Web.Data.Crm;
@@ -12,7 +13,7 @@ public sealed class TabTests : ComponentTestBase
     // ── CRM ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void CrmTab_lists_the_seeded_accounts()
+    public void CrmTab_when_rendered_lists_the_seeded_accounts()
     {
         var cut = Render<CrmTab>();
 
@@ -24,7 +25,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void CrmTab_edit_row_saves_and_publishes_account_updated_then_closes()
+    public void CrmTab_when_an_edited_row_is_saved_publishes_account_updated_and_closes()
     {
         var cut = Render<CrmTab>();
 
@@ -44,7 +45,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void CrmTab_clicking_the_editing_row_again_or_cancel_closes_the_editor()
+    public void CrmTab_when_the_editing_row_is_clicked_again_or_cancelled_closes_the_editor()
     {
         var cut = Render<CrmTab>();
 
@@ -61,7 +62,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void CrmTab_status_button_toggles_the_account_and_publishes_each_change()
+    public void CrmTab_when_the_status_button_is_clicked_toggles_the_account_and_publishes_each_change()
     {
         var cut = Render<CrmTab>();
 
@@ -91,7 +92,7 @@ public sealed class TabTests : ComponentTestBase
     // ── ERP ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void ErpTab_starts_on_the_list_with_the_record_count()
+    public void ErpTab_when_rendered_starts_on_the_list_with_the_record_count()
     {
         var cut = Render<ErpTab>();
 
@@ -103,7 +104,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void ErpTab_selecting_a_row_shows_the_detail_and_selecting_it_again_returns_to_the_list()
+    public void ErpTab_when_a_row_is_selected_shows_the_detail_and_selecting_it_again_returns_to_the_list()
     {
         var cut = Render<ErpTab>();
 
@@ -124,7 +125,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void ErpTab_edit_saves_and_publishes_account_updated_and_cancel_discards()
+    public void ErpTab_when_an_edit_is_saved_publishes_account_updated_and_cancel_discards()
     {
         var cut = Render<ErpTab>();
         cut.FindAll(".erp-roster-row")[0].Click();
@@ -148,7 +149,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void ErpTab_status_key_closes_and_reopens_the_account_and_publishes_each_change()
+    public void ErpTab_when_the_status_key_is_pressed_closes_and_reopens_the_account_and_publishes_each_change()
     {
         var cut = Render<ErpTab>();
         cut.FindAll(".erp-roster-row")[0].Click();
@@ -167,7 +168,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void ErpTab_new_customer_requires_a_name_then_saves_with_defaults_and_publishes_account_created()
+    public void ErpTab_when_a_new_customer_is_saved_requires_a_name_then_applies_defaults_and_publishes_account_created()
     {
         var cut = Render<ErpTab>();
 
@@ -185,6 +186,7 @@ public sealed class TabTests : ComponentTestBase
 
         var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0006"));
         Assert.Equal(("Hooli", "GEN", (string?)null, 0m), (saved.Name, saved.CustType, saved.Terms, saved.CreditLim));
+        Assert.Equal(((string?)null, (string?)null), (saved.Email, saved.Phone));
         Assert.Contains("6 RECORDS", cut.Find(".erp-trow-statusbar").TextContent, StringComparison.Ordinal);
         var sent = Assert.Single(SentBy("ERP"));
         Assert.Equal(("account.created", "CUST0006"), (sent.Topic, sent.CorrelationId));
@@ -193,12 +195,14 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void ErpTab_new_customer_upper_cases_type_and_terms_and_parses_the_credit_limit()
+    public void ErpTab_when_a_new_customer_has_type_terms_and_credit_upper_cases_them_and_parses_the_credit_limit()
     {
         var cut = Render<ErpTab>();
         cut.Find(".erp-roster-new").Click();
 
         cut.FindAll(".erp-input")[0].Input("Pied Piper");
+        cut.FindAll(".erp-input")[1].Input("ops@piedpiper.example");
+        cut.FindAll(".erp-input")[2].Input("555-0199");
         cut.FindAll(".erp-input")[3].Input("retl");
         cut.FindAll(".erp-input")[4].Input("net60");
         cut.FindAll(".erp-input")[5].Input("2500.50");
@@ -206,12 +210,38 @@ public sealed class TabTests : ComponentTestBase
 
         var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0006"));
         Assert.Equal(("RETL", "NET60", 2500.50m), (saved.CustType, saved.Terms, saved.CreditLim));
+        Assert.Equal(("ops@piedpiper.example", "555-0199"), (saved.Email, saved.Phone));
     }
 
 
 
     [Fact]
-    public void ErpTab_cancelling_a_new_customer_returns_to_the_list()
+    public void ErpTab_new_customer_when_current_culture_uses_a_decimal_comma_parses_the_credit_limit_invariantly()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var cut = Render<ErpTab>();
+            cut.Find(".erp-roster-new").Click();
+
+            cut.FindAll(".erp-input")[0].Input("Hooli");
+            cut.FindAll(".erp-input")[5].Input("2500.50");
+            ByText(cut, ".erp-key", "[F2=SAVE]").Click();
+
+            var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0006"));
+            Assert.Equal(2500.50m, saved.CreditLim);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+
+
+    [Fact]
+    public void ErpTab_when_a_new_customer_is_cancelled_returns_to_the_list()
     {
         var cut = Render<ErpTab>();
         cut.Find(".erp-roster-new").Click();
@@ -225,7 +255,7 @@ public sealed class TabTests : ComponentTestBase
 
 
     [Fact]
-    public void ErpTab_clock_ticks_and_bus_changes_refresh_the_roster()
+    public void ErpTab_when_the_clock_ticks_or_the_bus_changes_refreshes_the_roster()
     {
         var cut = Render<ErpTab>();
         var firstClock = cut.FindAll(".erp-trow-dim")[0].TextContent;
@@ -233,11 +263,29 @@ public sealed class TabTests : ComponentTestBase
         Monitor.Publish("account.updated", "Tester", "u-1", Fields(("CustomerId", "CUST0002"), ("Name", "Globex From Bus")));
 
         cut.WaitForAssertion(() => Assert.Contains("Globex From Bus", cut.Find(".erp-roster").TextContent, StringComparison.Ordinal));
-        cut.WaitForAssertion
-        (
-            () => Assert.NotEqual(firstClock, cut.FindAll(".erp-trow-dim")[0].TextContent),
-            TimeSpan.FromSeconds(5)
-        );
+        Time.Advance(TimeSpan.FromSeconds(1));
+        cut.WaitForAssertion(() => Assert.NotEqual(firstClock, cut.FindAll(".erp-trow-dim")[0].TextContent));
+    }
+
+
+
+    [Fact]
+    public async Task ErpTab_new_customer_when_the_next_number_is_taken_skips_to_a_free_one()
+    {
+        using (var scope = Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ErpDbContext>();
+            db.CustMast.Add(new CustMast { CustNum = "CUST0007", Name = "Minted By The Bus" });
+            await db.SaveChangesAsync();
+        }
+
+        var cut = Render<ErpTab>();
+        cut.Find(".erp-roster-new").Click();
+        cut.FindAll(".erp-input")[0].Input("Hooli");
+        ByText(cut, ".erp-key", "[F2=SAVE]").Click();
+
+        var saved = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0008"));
+        Assert.Equal("Hooli", saved.Name);
     }
 
 
@@ -245,7 +293,7 @@ public sealed class TabTests : ComponentTestBase
     // ── eCommerce ────────────────────────────────────────────────────────
 
     [Fact]
-    public void ECommerceTab_edit_saves_and_publishes_and_toggle_or_cancel_closes()
+    public void ECommerceTab_when_an_edit_is_saved_publishes_and_toggle_or_cancel_closes()
     {
         var cut = Render<ECommerceTab>();
         Assert.Equal(5, cut.FindAll("tbody tr").Count);
@@ -285,7 +333,7 @@ public sealed class TabTests : ComponentTestBase
     // ── Customer Portal ──────────────────────────────────────────────────
 
     [Fact]
-    public void CustomerPortalTab_edit_saves_and_publishes_and_toggle_or_cancel_closes()
+    public void CustomerPortalTab_when_an_edit_is_saved_publishes_and_toggle_or_cancel_closes()
     {
         var cut = Render<CustomerPortalTab>();
         Assert.Equal(5, cut.FindAll("tbody tr").Count);
