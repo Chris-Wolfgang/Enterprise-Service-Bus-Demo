@@ -14,6 +14,7 @@ public sealed class ECommerceDbContext(DbContextOptions<ECommerceDbContext> opti
     public DbSet<ECommerceCustomer> Customers => Set<ECommerceCustomer>();
 
 
+
     /// <summary>
     /// Configures the model and seeds the eCommerce system's demo customers.
     /// </summary>

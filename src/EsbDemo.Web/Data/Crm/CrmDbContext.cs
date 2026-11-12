@@ -14,6 +14,7 @@ public sealed class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbCon
     public DbSet<CrmAccount> Accounts => Set<CrmAccount>();
 
 
+
     /// <summary>
     /// Configures the model and seeds the CRM system's demo customers.
     /// </summary>

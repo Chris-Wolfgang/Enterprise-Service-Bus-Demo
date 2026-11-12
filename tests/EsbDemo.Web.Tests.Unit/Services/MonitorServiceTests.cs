@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using EsbDemo.Web.Models;
 using EsbDemo.Web.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EsbDemo.Web.Tests.Unit.Services;
@@ -587,5 +589,97 @@ public sealed class MonitorServiceTests
         Assert.Equal("New Co", account.Fields["Name"]);
         Assert.Equal("Active", sut.Accounts[0].Status);
         Assert.Equal("Renamed Co", sut.Accounts[0].Fields["Name"]);
+    }
+
+
+    [Fact]
+    public async Task Publish_when_a_handler_throws_synchronously_still_delivers_to_the_other_subscribers_and_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var warehouseCalls = 0;
+        sut.RegisterHandler("CRM", (_, _) => throw new InvalidOperationException("CRM is broken"));
+        sut.RegisterHandler("Data Warehouse", (_, _) => { warehouseCalls++; return Task.CompletedTask; });
+
+        sut.Publish("account.created", "Tester", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        Assert.Equal(1, warehouseCalls);
+        await TestConfig.WaitUntilAsync(() => logger.Collector.Count > 0);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.IsType<InvalidOperationException>(record.Exception);
+        Assert.Contains("CRM handler for account.created", record.Message, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task Publish_when_an_OnChanged_subscriber_throws_still_notifies_the_others_and_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var laterCalls = 0;
+        sut.OnChanged += (_, _) => throw new InvalidOperationException("UI is broken");
+        sut.OnChanged += (_, _) => laterCalls++;
+
+        sut.Publish("account.activated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        Assert.Equal(1, laterCalls);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.Equal("UI is broken", record.Exception?.Message);
+    }
+
+
+
+    [Fact]
+    public async Task SetOnline_when_a_flushed_handler_faults_asynchronously_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        sut.RegisterHandler("ERP", (_, _) => Task.FromException(new InvalidOperationException("ERP save failed")));
+        sut.SetOnline("ERP", online: false);
+        sut.Publish("account.updated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        sut.SetOnline("ERP", online: true);
+
+        await TestConfig.WaitUntilAsync(() => logger.Collector.Count > 0);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal("ERP save failed", record.Exception?.Message);
+        Assert.Contains("ERP handler for account.updated", record.Message, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task Publish_when_account_create_repeats_a_correlation_id_times_out_once_for_the_latest_request()
+    {
+        var (sut, time) = await CreateAsync();
+        sut.SetOnline("ERP", online: false);
+        sut.Publish("account.create", "CRM", "corr-1", Fields(("Name", "First")), isUserInitiated: true);
+        sut.Publish("account.create", "eCommerce", "corr-1", Fields(("Name", "Second")), isUserInitiated: true);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
+
+        var timeout = Assert.Single(sut.Entries, e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
+        Assert.Equal("eCommerce", timeout.AppName);
+        Assert.Equal("Second", Assert.Single(sut.Accounts).Fields["Name"]);
+    }
+
+
+
+    [Fact]
+    public async Task Publish_when_the_log_is_full_drops_the_oldest_entries()
+    {
+        var (sut, _) = await CreateAsync();
+
+        for (var i = 0; i <= MonitorService.MaxEntries; i++)
+            sut.Publish("no.subscribers", "Tester", null, Fields(("N", i.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+
+        var entries = sut.Entries;
+        Assert.Equal(MonitorService.MaxEntries, entries.Count);
+        Assert.Equal("N: 1", entries[0].Summary);
+        Assert.Equal("N: " + MonitorService.MaxEntries.ToString(System.Globalization.CultureInfo.InvariantCulture), entries[^1].Summary);
     }
 }
