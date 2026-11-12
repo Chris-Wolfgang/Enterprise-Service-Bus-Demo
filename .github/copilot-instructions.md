@@ -2,91 +2,41 @@
 
 ## Repository Summary
 
-This is a **repository template** for creating new .NET repositories. It provides a standardized structure with comprehensive GitHub integration, CI/CD workflows, and development tooling. The template supports multi-TFM .NET projects using C# and follows Microsoft's recommended project organization patterns.
+This repository is the **Enterprise Service Bus Demo**: a Blazor Server application in which six simulated business systems (CRM, ERP, eCommerce, WMS, Customer Portal, Data Warehouse) exchange messages over an in-memory bus. It is an application, not a library - nothing is published to NuGet.
 
-**Repository Type**: Template (not a working project)
-**Target Platforms**: .NET Framework 4.6.2–4.8.1, .NET Core 3.1, .NET 5.0–10.0
-**Primary Language**: C#
-**Size**: Small template (~15 configuration files, empty project folders)  
+**Repository Type**: Working application (created from the fleet repo-template)
+**Target Platforms**: `EsbDemo.Web` targets `net10.0`; `EsbDemo.Core` targets `netstandard2.0` and its tests run on .NET Framework 4.6.2-4.8.1, .NET Core 3.1 and .NET 5.0-10.0
+**Primary Language**: C# (Razor components)
+
+### Solution structure (`Enterprise-Service-Bus-Demo.slnx`)
+- `src/EsbDemo.Core` - config model (`AppConfig`, `TopicConfig`, `FieldConfig`, `AutoResponse`) and `PlaceholderResolver`.
+- `src/EsbDemo.Web` - the app: `Services/MonitorService.cs` (the in-memory bus, offline queues, account tracking, auto-responses), `Services/ConfigService.cs`, one connector per system in `Connectors/`, one EF Core in-memory `DbContext` per system in `Data/`, and the UI in `Components/`.
+- `src/EsbDemo.Web/config/apps.json` and `topics.json` - the systems, their publish/subscribe topics and auto-responses, and each topic's fields.
+- `tests/EsbDemo.Core.Tests.Unit`, `tests/EsbDemo.Web.Tests.Unit` (xunit + bUnit), `tests/EsbDemo.Tests.Fuzz` (CsCheck property tests).
 
 ## Build and Validation Instructions
 
 ### Prerequisites
-- .NET SDK (8.0+ recommended; CI tests against .NET 5.0–10.0 and .NET Framework 4.6.2–4.8.1)
-- ReportGenerator tool (installed via `dotnet tool install -g dotnet-reportgenerator-globaltool`)
-- DevSkim CLI (installed via `dotnet tool install --global Microsoft.CST.DevSkim.CLI`)
+- .NET 10 SDK (older runtimes only for the Core test TFMs)
+- PowerShell 7 for `scripts/build-pr.ps1`
 
-### Build Process (For Repositories Created from This Template)
-**IMPORTANT**: This template has no buildable projects. These commands apply to repositories created FROM this template.
+### Local gate
+Run `pwsh ./scripts/build-pr.ps1` before pushing. It restores and builds (Release), runs every test project on every TFM, generates the coverage report and enforces the gates, and runs DevSkim and gitleaks. InspectCode, the changelog-fragment check and the solution-consistency check run only in CI.
 
-1. **Restore Dependencies** (always run first):
-   ```powershell
-   dotnet restore
-   ```
-
-2. **Build Solution**:
-   ```powershell
-   dotnet build --no-restore --configuration Release
-   ```
-
-3. **Run Tests with Coverage**:
-   ```powershell
-   # Find and test all test projects
-   Get-ChildItem -Path ./tests -Filter '*Test*.csproj' -Recurse | ForEach-Object {
-     dotnet test $_.FullName --no-build --configuration Release --collect:"XPlat Code Coverage" --results-directory "./TestResults"
-   }
-   ```
-
-4. **Generate Coverage Reports**:
-   ```powershell
-   reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" -targetdir:"CoverageReport" -reporttypes:"Html;TextSummary;MarkdownSummaryGithub;CsvSummary"
-   ```
-
-5. **Security Scanning**:
-   ```powershell
-   devskim analyze --source-code . -f text --output-file devskim-results.txt -E
-   ```
+Run the app with `dotnet run --project src/EsbDemo.Web`.
 
 ### Critical Build Requirements
-- **Code Coverage**: Minimum 90% line coverage required for all projects
+- **Code Coverage**: at least 95% line coverage for production assemblies (`src/`) and 100% for test assemblies (`tests/`), enforced by `pr.yaml` and `scripts/build-pr.ps1`
+- **Warnings as errors** in Release, with the analyzers configured in `Directory.Build.props`
 - **Security Scanning**: DevSkim must pass with no errors
-- **Build Configuration**: Always use Release configuration for CI
-- **Test Pattern**: Test projects must match `*Test*.csproj` pattern in `/tests` folder
-
-### Common Issues and Workarounds
-- **Timeout Issues**: Coverage and security scans can take 5-10 minutes for larger projects
-- **Coverage Threshold Failures**: If below 90%, the build will fail - this is by design
-- **Missing Test Projects**: The workflow expects at least one test project in `/tests` folder
-- **DevSkim False Positives**: Review `devskim-results.txt` for any security findings
+- **Changelog**: every PR that changes `src/` adds one fragment under `changelog/unreleased/` (see its README)
 
 ## Project Layout and Architecture
 
-### Standard Directory Structure
-```
-root/
-├── MySolution.sln              # Solution file (create in root)
-├── src/                        # Application projects
-│   ├── MyApp/
-│   │   └── MyApp.csproj
-│   └── MyLib/
-│       └── MyLib.csproj
-├── tests/                      # Test projects (required)
-│   ├── MyApp.Tests/
-│   │   └── MyApp.Tests.csproj
-│   └── MyLib.Tests/
-│       └── MyLib.Tests.csproj
-├── benchmarks/                 # Performance benchmarks (optional)
-│   └── MyApp.Benchmarks/
-│       └── MyApp.Benchmarks.csproj
-├── examples/                   # Example projects (optional)
-├── docs/                       # Documentation
-└── .github/                    # GitHub configuration
-```
-
 ### Key Configuration Files
 - **`.editorconfig`**: Code style rules (C# file-scoped namespaces, var preferences, analyzer severity)
+- **`Directory.Build.props`** / **`BannedSymbols.txt`**: shared build settings, analyzers and banned (synchronous) APIs
 - **`.gitignore`**: Comprehensive .NET gitignore (Visual Studio, build artifacts, packages)
-- **`REPO-INSTRUCTIONS.md`**: Template setup instructions (delete after setup)
 - **`CONTRIBUTING.md`**: Contribution guidelines
 - **`CODE_OF_CONDUCT.md`**: Standard Contributor Covenant v2.0
 
@@ -135,9 +85,9 @@ Branch protection rules are configured by running the local PowerShell script `s
 ## Key Files and Locations
 
 ### Root Directory Files
-- `README.md` - Basic template description (update for your project)
+- `README.md` - What the demo shows, how to run and configure it
 - `LICENSE` - MIT License
-- `REPO-INSTRUCTIONS.md` - Template setup instructions (delete after setup)
+- `Enterprise-Service-Bus-Demo.slnx` - Solution file
 - `.editorconfig` - Code style configuration
 - `.gitignore` - .NET-specific gitignore
 
@@ -148,12 +98,10 @@ Branch protection rules are configured by running the local PowerShell script `s
 - `CODEOWNERS` - Code ownership rules
 - `dependabot.yml` - Dependency update configuration
 
-### Project Directories (Currently Empty in Template)
-- `src/` - Application source code
-- `tests/` - Unit and integration tests
-- `benchmarks/` - Performance benchmarks
-- `examples/` - Example usage projects
-- `docs/` - Documentation (contains placeholder `index.html`)
+### Other Directories
+- `src/`, `tests/` - see "Solution structure" above
+- `benchmarks/`, `examples/` - empty placeholders
+- `docs/` - hand-written repository guides; the API site is built from `docfx_project/` into `docfx_project/_site`
 
 ## Maintenance Framework
 
@@ -201,21 +149,17 @@ When a new repo is created from this template:
 ### Trust These Instructions
 This information has been validated against the template structure and GitHub workflows. **Only search for additional information if these instructions are incomplete or found to be incorrect.**
 
-### When Working with This Template
-1. **Creating New Projects**: Follow the structure outlined in `REPO-INSTRUCTIONS.md`
+### When Working in This Repository
+1. **New systems or topics**: add them to `src/EsbDemo.Web/config/apps.json` / `topics.json`; a system that stores data also needs a connector and a `DbContext`
 2. **Adding Dependencies**: Use `dotnet add package` commands
-3. **Code Style**: Follow `.editorconfig` rules (file-scoped namespaces, explicit typing)
-4. **Testing**: Ensure test projects follow `*Test*.csproj` naming convention
-5. **Coverage**: Aim for >90% code coverage to pass CI
+3. **Code Style**: Follow `.editorconfig` rules and the repository CLAUDE.md conventions
+4. **Testing**: Test projects live in `tests/` and are named `*.Tests.Unit` / `*.Tests.Fuzz`
+5. **Coverage**: 95% line coverage for `src/`, 100% for `tests/`
 6. **Security**: Review DevSkim findings and address security concerns
 7. **Maintenance framework**: When you find improvement work that fits a category, open a `maintenance-task` sub-issue rather than fixing silently (see "Maintenance Framework" section above)
 
 ### Validation Steps
 Before submitting changes:
-1. Run `dotnet restore && dotnet build --configuration Release`
-2. Run tests with coverage collection
-3. Verify coverage meets 90% threshold
-4. Run DevSkim security scan
-5. Ensure all GitHub Actions checks pass
-
-This template provides a solid foundation for .NET projects with enterprise-grade CI/CD, security scanning, and development best practices built-in.
+1. Run `pwsh ./scripts/build-pr.ps1` (build, tests, coverage gates, DevSkim, gitleaks)
+2. Add a changelog fragment if `src/` changed
+3. Ensure all GitHub Actions checks pass
