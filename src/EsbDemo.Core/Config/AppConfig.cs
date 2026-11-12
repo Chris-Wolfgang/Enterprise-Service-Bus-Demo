@@ -16,10 +16,12 @@ public sealed class AppConfig
     public string Name { get; set; } = string.Empty;
 
 
+
     /// <summary>
     /// Gets or sets the position of the app's panel in the UI; lower values are shown first.
     /// </summary>
     public int DisplayOrder { get; set; }
+
 
 
     /// <summary>
@@ -28,16 +30,19 @@ public sealed class AppConfig
     public bool DefaultOnline { get; set; } = true;
 
 
+
     /// <summary>
     /// Gets or sets the topics this app can publish.
     /// </summary>
     public List<string> Publishes { get; set; } = new List<string>();
 
 
+
     /// <summary>
     /// Gets or sets the topics this app receives from the bus.
     /// </summary>
     public List<string> Subscribes { get; set; } = new List<string>();
+
 
 
     /// <summary>
