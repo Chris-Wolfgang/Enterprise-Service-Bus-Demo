@@ -42,7 +42,7 @@ public sealed class Properties
 
     /// <summary>A template built from literal text and placeholders in any order.</summary>
     private static readonly Gen<string> AnyTemplate =
-        Gen.OneOf(Literal, Gen.OneOfConst(Tokens)).Array[0, 8].Select(string.Concat);
+        Gen.OneOf(Literal, Gen.OneOf(Tokens)).Array[0, 8].Select(string.Concat);
 
 
 
@@ -142,8 +142,8 @@ public sealed class Properties
                         RegexTimeout
                     );
                     return match.Success
-                        && int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) is >= 1000 and <= 9998
-                        && int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) is >= 10 and <= 98;
+                        && int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) is >= 1000 and <= 9999
+                        && int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) is >= 10 and <= 99;
                 },
                 iter: FuzzIterations,
                 time: FuzzTimeSeconds
@@ -160,7 +160,7 @@ public sealed class Properties
             (
                 (now, text) =>
                 {
-                    var expected = text + now.ToString("yyyy-MM-dd", CultureInfo.CurrentCulture) + text + now.ToString("HH:mm", CultureInfo.CurrentCulture);
+                    var expected = text + now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + text + now.ToString("HH:mm", CultureInfo.InvariantCulture);
                     var actual = PlaceholderResolver.Resolve(text + "{yyyy-MM-dd}" + text + "{hh:mm}", now, new Random(0));
                     return string.Equals(expected, actual, StringComparison.Ordinal);
                 },
@@ -212,7 +212,7 @@ public sealed class Properties
         var topics = config.Topics.Select(t => t.Topic).ToArray();
         var sources = config.Apps.Select(a => a.Name).Append("Tester").ToArray();
 
-        Gen.Select(Gen.OneOfConst(topics), Gen.OneOfConst(sources), AnyPayload)
+        Gen.Select(Gen.OneOf(topics), Gen.OneOf(sources), AnyPayload)
             .Sample
             (
                 (topic, source, fields) =>

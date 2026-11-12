@@ -11,11 +11,13 @@ public sealed class FieldConfig
     public string Name { get; set; } = string.Empty;
 
 
+
     /// <summary>
     /// Gets or sets the field's input type. <c>text</c> (the default) is a free-text input;
     /// <c>account</c> is a picker over existing customer accounts.
     /// </summary>
     public string Type { get; set; } = "text";
+
 
 
     /// <summary>

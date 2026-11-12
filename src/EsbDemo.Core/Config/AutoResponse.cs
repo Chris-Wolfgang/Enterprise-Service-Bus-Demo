@@ -16,6 +16,7 @@ public sealed class AutoResponse
     public string On { get; set; } = string.Empty;
 
 
+
     /// <summary>
     /// Gets or sets the topic the app publishes in response to <see cref="On"/>.
     /// </summary>

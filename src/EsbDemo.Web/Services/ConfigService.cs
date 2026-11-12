@@ -10,16 +10,20 @@ public sealed class ConfigService
 {
     private readonly IWebHostEnvironment _env;
 
+
+
     /// <summary>
     /// Gets the configured apps; empty until <see cref="LoadAsync"/> completes.
     /// </summary>
     public IReadOnlyList<AppConfig> Apps { get; private set; } = Array.Empty<AppConfig>();
 
 
+
     /// <summary>
     /// Gets the configured topics; empty until <see cref="LoadAsync"/> completes.
     /// </summary>
     public IReadOnlyList<TopicConfig> Topics { get; private set; } = Array.Empty<TopicConfig>();
+
 
 
     /// <summary>
@@ -30,6 +34,7 @@ public sealed class ConfigService
     {
         _env = env;
     }
+
 
 
     /// <summary>
@@ -58,6 +63,7 @@ public sealed class ConfigService
     }
 
 
+
     /// <summary>
     /// Finds the configuration of a topic.
     /// </summary>
@@ -65,6 +71,7 @@ public sealed class ConfigService
     /// <returns>The topic's configuration, or <see langword="null"/> if it is not configured.</returns>
     public TopicConfig? GetTopic(string topic) =>
         Topics.FirstOrDefault(t => string.Equals(t.Topic, topic, StringComparison.Ordinal));
+
 
 
     /// <summary>
@@ -83,6 +90,7 @@ public sealed class ConfigService
             ? $"topic-{config.ColorFamily}"
             : $"topic-{config.ColorFamily}-{config.ColorShade}";
     }
+
 
 
     /// <summary>
