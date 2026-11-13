@@ -4,6 +4,8 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <!-- Part of a demo application, not a library: nothing here is published to NuGet. -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
 </Project>
