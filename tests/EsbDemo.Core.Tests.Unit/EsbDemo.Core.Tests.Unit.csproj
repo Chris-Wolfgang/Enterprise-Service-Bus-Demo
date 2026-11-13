@@ -7,7 +7,6 @@
 		<IsTestProject>true</IsTestProject>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 
-		<Copyright>Copyright 2026 Chris Wolfgang</Copyright>
 	</PropertyGroup>
 
 	<ItemGroup>
