@@ -827,6 +827,104 @@ jobs:
           Write-Host "==========================================" -ForegroundColor Green
 
   # Build and deploy versioned documentation via the shared docfx workflow
+  # This repository ships an application, not a library (#169). Both src projects are
+  # IsPackable=false, so pack-and-validate reports has-packages=false and the NuGet jobs
+  # (publish-nuget, update-release-artifacts) skip. The release artifact is instead a
+  # self-contained `dotnet publish` of EsbDemo.Web per runtime, zipped and attached to the
+  # GitHub Release by attach-app below, with a build-provenance attestation.
+  publish-app:
+    name: Publish App (${{ matrix.rid }})
+    needs: validate-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        rid: [win-x64, linux-x64, osx-arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish self-contained build and zip it
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          dotnet publish src/EsbDemo.Web/EsbDemo.Web.csproj \
+            --configuration Release \
+            --runtime "$RID" \
+            --self-contained true \
+            --output "publish/$RID"
+          mkdir -p app
+          zip_path="$PWD/app/EsbDemo.Web-${TAG_NAME}-${RID}.zip"
+          (cd "publish/$RID" && zip -qr "$zip_path" .)
+          ls -l app
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: app-${{ matrix.rid }}
+          path: ./app/*.zip
+          retention-days: 90
+          if-no-files-found: error
+
+  # Attaches the per-runtime zips and their provenance bundle to the GitHub Release.
+  attach-app:
+    name: Attach App to Release
+    needs: publish-app
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write       # OIDC token for signing the provenance attestation
+      attestations: write   # record the SLSA build-provenance attestation on GitHub
+      contents: write       # Required to upload assets to the GitHub Release
+    steps:
+      - name: Download app artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: app-*
+          merge-multiple: true
+          path: ./app
+
+      - name: Attest build provenance for the app zips
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: './app/*.zip'
+
+      # `gh` is pre-installed on the runner, so no third-party action is needed
+      # to upload release assets (zizmor superfluous-actions).
+      - name: Attach app zips and provenance to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$BUNDLE_PATH" ]; then
+            echo "::error::attest-build-provenance reported no bundle at '$BUNDLE_PATH'"
+            exit 1
+          fi
+          cp "$BUNDLE_PATH" "./app/${GITHUB_REPOSITORY##*/}-app-${TAG_NAME}.intoto.jsonl"
+          shopt -s nullglob
+          files=(./app/*.zip ./app/*.intoto.jsonl)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No app zips were downloaded"
+            exit 1
+          fi
+          echo "Uploading ${#files[@]} asset(s) to release $TAG_NAME"
+          gh release upload "$TAG_NAME" "${files[@]}" --clobber
+
   # Note: reusable workflow jobs called via `uses:` do not require `runs-on` in the caller
   trigger-docs:
     name: Build & Deploy Documentation
