@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using EsbDemo.Web.Services;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
 
 namespace EsbDemo.Tests.Shared;
