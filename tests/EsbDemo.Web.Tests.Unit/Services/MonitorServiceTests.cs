@@ -297,7 +297,7 @@ public sealed class MonitorServiceTests
         Assert.Equal("CRM", pending.SourceApp);
         Assert.Null(pending.CustomerId);
 
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
         var reply = Sent(sut, "account.created")[0];
@@ -309,7 +309,7 @@ public sealed class MonitorServiceTests
         Assert.Matches(CustomerIdPattern, account.CustomerId);
         Assert.Equal("Acme Corp 7", account.Fields["Name"]);
 
-        time.Advance(TimeSpan.FromSeconds(10));
+        time.Advance(MonitorService.AccountCreateTimeout);
         Assert.DoesNotContain(sut.Entries, e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
     }
 
@@ -324,7 +324,7 @@ public sealed class MonitorServiceTests
         var raised = 0;
         sut.OnChanged += (_, _) => raised++;
 
-        time.Advance(TimeSpan.FromSeconds(10));
+        time.Advance(MonitorService.AccountCreateTimeout);
         await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
 
         var timeout = sut.Entries.Single(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
@@ -334,7 +334,7 @@ public sealed class MonitorServiceTests
         Assert.Equal(1, raised);
 
         sut.SetOnline("ERP", online: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => string.Equals(sut.Accounts.Single().Status, "Active", StringComparison.Ordinal));
     }
 
@@ -373,7 +373,7 @@ public sealed class MonitorServiceTests
         sut.Publish("account.create", "ERP", "erp-corr", Fields(("Name", "Own")), isUserInitiated: true);
 
         sut.SetOnline("ERP", online: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
         var reply = Sent(sut, "account.created")[0];
@@ -396,7 +396,7 @@ public sealed class MonitorServiceTests
             Fields(("CustomerId", "CUST0001"), ("OrderRef", "ORD-1234"), ("Amount", "$1,230.00")),
             isUserInitiated: true
         );
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "order.placed").Length == 1);
 
         var reply = Sent(sut, "order.placed")[0];
@@ -426,7 +426,7 @@ public sealed class MonitorServiceTests
 
         sut.Publish("ping", "Tester", "p-1", Fields(("A", "1")), isUserInitiated: true);
         sut.Publish("ping2", "Tester", "p-2", Fields(("A", "2")), isUserInitiated: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "pong").Length == 1);
 
         Assert.Single(Sent(sut, "ping"));
@@ -452,7 +452,7 @@ public sealed class MonitorServiceTests
         );
 
         sut.Publish("account.create", "CRM", "corr-1", Fields(("Name", "Acme")), isUserInitiated: true);
-        time.Advance(TimeSpan.FromMilliseconds(500));
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
         Assert.Equal(new[] { ("account.create", false), ("account.created", false) }, seen);
@@ -562,7 +562,7 @@ public sealed class MonitorServiceTests
         sut.OnChanged += (_, _) => raised++;
 
         sut.SetBus("Kafka");
-        time.Advance(TimeSpan.FromSeconds(10));
+        time.Advance(MonitorService.AccountCreateTimeout);
 
         Assert.Equal("Kafka", sut.SelectedBus);
         Assert.Empty(sut.Entries);
@@ -584,6 +584,7 @@ public sealed class MonitorServiceTests
         sut.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0099"), ("Name", "Renamed Co")));
         account.Status = "Changed by caller";
 
+        // 1 send + 4 subscribers of account.created (CRM, eCommerce, Customer Portal, Data Warehouse).
         Assert.Equal(5, entries.Count);
         Assert.Equal("New Co", account.Fields["Name"]);
         Assert.Equal("Active", sut.Accounts[0].Status);

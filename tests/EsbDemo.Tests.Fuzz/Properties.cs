@@ -273,7 +273,7 @@ public sealed class Properties
                     var fields = new Dictionary<string, string>(StringComparer.Ordinal) { ["Name"] = name, ["Email"] = email, ["Phone"] = phone };
 
                     sut.Publish("account.create", "CRM", "corr", fields, isUserInitiated: true);
-                    time.Advance(TimeSpan.FromMilliseconds(500));
+                    time.Advance(MonitorService.AutoResponseDelay);
                     var resolved = SpinWait.SpinUntil(() => string.Equals(sut.Accounts.Single().Status, "Active", StringComparison.Ordinal), TimeSpan.FromSeconds(5));
 
                     var account = sut.Accounts.Single();
