@@ -25,6 +25,10 @@ public sealed partial class MonitorService
     // auto-response and timeout tasks call in from the thread pool, so all access is serialized.
     private readonly Lock _gate = new();
 
+    // Backs OnChanged. Explicit accessors because NotifyChanged raises each subscriber separately
+    // through the invocation list rather than through a single field-like event invoke.
+    private EventHandler? _onChanged;
+
     /// <summary>The most entries the log keeps; older ones are dropped first.</summary>
     internal const int MaxEntries = 500;
 
@@ -54,7 +58,19 @@ public sealed partial class MonitorService
     /// It can be raised from a thread-pool thread, so UI subscribers should marshal to their
     /// renderer, for example with <c>InvokeAsync</c>.
     /// </remarks>
-    public event EventHandler? OnChanged;
+    public event EventHandler? OnChanged
+    {
+        add
+        {
+            lock (_gate)
+                _onChanged += value;
+        }
+        remove
+        {
+            lock (_gate)
+                _onChanged -= value;
+        }
+    }
 
 
     /// <summary>
@@ -734,7 +750,7 @@ public sealed partial class MonitorService
     // nor propagates into the Publish / SetOnline / SetBus call that raised the event (#165).
     private void NotifyChanged()
     {
-        if (OnChanged is not { } handlers)
+        if (Volatile.Read(ref _onChanged) is not { } handlers)
             return;
 
         foreach (var handler in handlers.GetInvocationList().Cast<EventHandler>())
