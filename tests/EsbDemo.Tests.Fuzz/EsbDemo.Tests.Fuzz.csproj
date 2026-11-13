@@ -24,6 +24,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Using Include="Microsoft.AspNetCore.Hosting" />
 		<Using Include="Xunit" />
 	</ItemGroup>
 
