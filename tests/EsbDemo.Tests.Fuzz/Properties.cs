@@ -172,7 +172,7 @@ public sealed class Properties
             (
                 (now, text) =>
                 {
-                    var expected = text + now.ToString("yyyy-MM-dd", CultureInfo.CurrentCulture) + text + now.ToString("HH:mm", CultureInfo.CurrentCulture);
+                    var expected = text + now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + text + now.ToString("HH:mm", CultureInfo.InvariantCulture);
                     var actual = PlaceholderResolver.Resolve(text + "{yyyy-MM-dd}" + text + "{hh:mm}", now, new Random(0));
                     return string.Equals(expected, actual, StringComparison.Ordinal);
                 },

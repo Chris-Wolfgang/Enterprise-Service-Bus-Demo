@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace EsbDemo.Core.Services;
 
 /// <summary>
@@ -32,9 +34,9 @@ public static class PlaceholderResolver
             return template;
 
         return template
-            .Replace("{yyyy-MM-dd}", now.ToString("yyyy-MM-dd"))
-            .Replace("{hh:mm}", now.ToString("HH:mm"))
-            .Replace("{####}", random.Next(1000, 9999).ToString())
-            .Replace("{##}", random.Next(10, 99).ToString());
+            .Replace("{yyyy-MM-dd}", now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+            .Replace("{hh:mm}", now.ToString("HH:mm", CultureInfo.InvariantCulture))
+            .Replace("{####}", random.Next(1000, 9999).ToString(CultureInfo.InvariantCulture))
+            .Replace("{##}", random.Next(10, 99).ToString(CultureInfo.InvariantCulture));
     }
 }
