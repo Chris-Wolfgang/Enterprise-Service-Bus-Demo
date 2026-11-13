@@ -27,7 +27,7 @@ public sealed class ConfigServiceTests
     [Fact]
     public async Task LoadAsync_when_reading_the_shipped_config_loads_every_app_and_topic()
     {
-        var sut = await TestConfig.LoadRealAsync();
+        var sut = await ShippedConfig.LoadAsync();
 
         Assert.Equal
         (

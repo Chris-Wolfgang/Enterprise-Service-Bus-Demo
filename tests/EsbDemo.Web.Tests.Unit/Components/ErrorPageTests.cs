@@ -13,7 +13,7 @@ namespace EsbDemo.Web.Tests.Unit.Components;
 public sealed class ErrorPageTests : ComponentTestBase
 {
     [Fact]
-    public void ErrorPage_without_a_request_id_hides_it()
+    public void ErrorPage_when_there_is_no_request_id_hides_it()
     {
         Activity.Current = null;
 
@@ -26,7 +26,7 @@ public sealed class ErrorPageTests : ComponentTestBase
 
 
     [Fact]
-    public void ErrorPage_shows_the_current_activity_or_the_request_trace_id()
+    public void ErrorPage_when_an_activity_or_a_trace_id_exists_shows_it()
     {
         Activity.Current = null;
         var fromContext = Render<Error>(p => p.AddCascadingValue<HttpContext>(new DefaultHttpContext { TraceIdentifier = "trace-42" }));

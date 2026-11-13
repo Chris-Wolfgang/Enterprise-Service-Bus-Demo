@@ -1,11 +1,8 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using CsCheck;
 using EsbDemo.Core.Services;
 using EsbDemo.Web.Services;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EsbDemo.Tests.Fuzz;
@@ -87,15 +84,6 @@ public sealed class Properties
 
 
 
-    private static async Task<ConfigService> LoadConfigAsync()
-    {
-        var config = new ConfigService(new FuzzHostEnvironment(AppContext.BaseDirectory));
-        await config.LoadAsync();
-        return config;
-    }
-
-
-
     private static bool SameEntries(IReadOnlyDictionary<string, string> expected, IReadOnlyDictionary<string, string> actual) =>
         expected.Count == actual.Count
         && expected.All(kv => actual.TryGetValue(kv.Key, out var value) && string.Equals(value, kv.Value, StringComparison.Ordinal));
@@ -105,7 +93,7 @@ public sealed class Properties
     // ── PlaceholderResolver ──────────────────────────────────────────────
 
     [Fact]
-    public void Resolve_leaves_text_without_placeholders_unchanged()
+    public void Resolve_when_the_template_has_no_placeholders_returns_it_unchanged()
     {
         Gen.Select(Gen.String, Gen.Int, AnyNow)
             .Where(t => !Tokens.Any(token => t.Item1.Contains(token, StringComparison.Ordinal)))
@@ -120,7 +108,7 @@ public sealed class Properties
 
 
     [Fact]
-    public void Resolve_replaces_every_placeholder()
+    public void Resolve_when_the_template_has_placeholders_replaces_every_one()
     {
         Gen.Select(AnyTemplate, Gen.Int, AnyNow)
             .Sample
@@ -138,7 +126,7 @@ public sealed class Properties
 
 
     [Fact]
-    public void Resolve_puts_four_and_two_digit_numbers_in_their_ranges()
+    public void Resolve_when_the_template_has_number_placeholders_puts_four_and_two_digit_numbers_in_their_ranges()
     {
         Gen.Select(Literal, Literal, Literal, Gen.Int)
             .Sample
@@ -165,7 +153,7 @@ public sealed class Properties
 
 
     [Fact]
-    public void Resolve_renders_the_date_and_time_placeholders_from_now()
+    public void Resolve_when_the_template_has_date_or_time_placeholders_renders_them_from_now()
     {
         Gen.Select(AnyNow, Literal)
             .Sample
@@ -184,7 +172,7 @@ public sealed class Properties
 
 
     [Fact]
-    public void Resolve_is_deterministic_for_a_given_seed_and_clock()
+    public void Resolve_when_the_seed_and_clock_are_fixed_is_deterministic()
     {
         Gen.Select(AnyTemplate, Gen.Int, AnyNow)
             .Sample
@@ -203,7 +191,7 @@ public sealed class Properties
 
 
     [Fact]
-    public void Resolve_rejects_a_null_random_for_any_template()
+    public void Resolve_when_random_is_null_throws_for_any_template()
     {
         Gen.String.Sample
         (
@@ -218,9 +206,9 @@ public sealed class Properties
     // ── MonitorService ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task Publish_logs_one_send_and_one_receive_per_subscriber_and_hands_each_an_equal_copy()
+    public async Task Publish_when_given_any_topic_source_and_payload_logs_one_send_and_one_receive_per_subscriber_and_hands_each_an_equal_copy()
     {
-        var config = await LoadConfigAsync();
+        var config = await ShippedConfig.LoadAsync();
         var topics = config.Topics.Select(t => t.Topic).ToArray();
         var sources = config.Apps.Select(a => a.Name).Append("Tester").ToArray();
 
@@ -257,9 +245,9 @@ public sealed class Properties
 
 
     [Fact]
-    public async Task Auto_reply_keeps_the_request_values_and_mints_an_eight_character_customer_id()
+    public async Task Auto_reply_when_an_account_is_requested_keeps_the_request_values_and_mints_an_eight_character_customer_id()
     {
-        var config = await LoadConfigAsync();
+        var config = await ShippedConfig.LoadAsync();
         var value = Gen.String[Gen.Char["abcdefghijklmnopqrstuvwxyz @.-0123456789"], 1, 20];
         var customerId = new Regex("^CUST[0-9]{4}$", RegexOptions.None, RegexTimeout);
 
@@ -287,40 +275,4 @@ public sealed class Properties
                 time: FuzzTimeSeconds
             );
     }
-}
-
-
-
-/// <summary>A host environment whose content root is the test output folder.</summary>
-[ExcludeFromCodeCoverage]
-internal sealed class FuzzHostEnvironment : IWebHostEnvironment
-{
-    public FuzzHostEnvironment(string contentRootPath)
-    {
-        ContentRootPath = contentRootPath;
-    }
-
-
-
-    public string ContentRootPath { get; set; }
-
-
-
-    public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-
-
-
-    public string ApplicationName { get; set; } = "EsbDemo.Web";
-
-
-
-    public string EnvironmentName { get; set; } = "Development";
-
-
-
-    public string WebRootPath { get; set; } = string.Empty;
-
-
-
-    public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
 }

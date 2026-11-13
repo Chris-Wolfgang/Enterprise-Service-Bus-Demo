@@ -20,7 +20,7 @@ public sealed class MonitorServiceTests
     private static async Task<(MonitorService Sut, FakeTimeProvider Time)> CreateAsync()
     {
         var time = new FakeTimeProvider();
-        return (new MonitorService(await TestConfig.LoadRealAsync(), time), time);
+        return (new MonitorService(await ShippedConfig.LoadAsync(), time), time);
     }
 
 
@@ -41,7 +41,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public void MonitorService_public_constructor_uses_the_system_clock_and_the_mock_bus()
+    public void MonitorService_public_constructor_when_called_uses_the_system_clock_and_the_mock_bus()
     {
         var sut = new MonitorService(new ConfigService(new FakeWebHostEnvironment(AppContext.BaseDirectory)));
 
@@ -102,7 +102,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_logs_one_send_entry_and_one_receive_entry_per_subscriber()
+    public async Task Publish_when_a_topic_has_subscribers_logs_one_send_entry_and_one_receive_entry_per_subscriber()
     {
         var (sut, time) = await CreateAsync();
 
@@ -154,7 +154,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_raises_OnChanged()
+    public async Task Publish_when_called_raises_OnChanged()
     {
         var (sut, _) = await CreateAsync();
         var raised = 0;
@@ -169,7 +169,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_passes_each_subscriber_handler_its_own_copy_and_skips_the_source()
+    public async Task Publish_when_a_topic_has_subscribers_passes_each_handler_its_own_copy_and_skips_the_source()
     {
         var (sut, _) = await CreateAsync();
         var fields = Fields(("CustomerId", "CUST0001"), ("Name", "Acme"));
@@ -252,7 +252,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task SetOnline_marks_only_the_deliveries_that_waited_in_the_queue_as_queued()
+    public async Task SetOnline_when_an_app_comes_back_marks_only_the_deliveries_that_waited_in_the_queue_as_queued()
     {
         var (sut, _) = await CreateAsync();
         sut.SetOnline("ERP", online: false);
@@ -553,7 +553,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task SetBus_resets_the_log_accounts_queues_and_pending_timeouts()
+    public async Task SetBus_when_called_resets_the_log_accounts_queues_and_pending_timeouts()
     {
         var (sut, time) = await CreateAsync();
         sut.SetOnline("ERP", online: false);
@@ -574,7 +574,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Entries_and_Accounts_return_snapshots_that_later_activity_does_not_change()
+    public async Task Entries_and_Accounts_when_activity_follows_return_snapshots_that_do_not_change()
     {
         var (sut, _) = await CreateAsync();
         sut.Publish("account.created", "ERP", "CUST0099", Fields(("CustomerId", "CUST0099"), ("Name", "New Co")));
@@ -596,7 +596,7 @@ public sealed class MonitorServiceTests
     public async Task Publish_when_a_handler_throws_synchronously_still_delivers_to_the_other_subscribers_and_logs_the_fault()
     {
         var logger = new FakeLogger<MonitorService>();
-        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var sut = new MonitorService(await ShippedConfig.LoadAsync(), new FakeTimeProvider(), logger);
         var warehouseCalls = 0;
         sut.RegisterHandler("CRM", (_, _) => throw new InvalidOperationException("CRM is broken"));
         sut.RegisterHandler("Data Warehouse", (_, _) => { warehouseCalls++; return Task.CompletedTask; });
@@ -617,7 +617,7 @@ public sealed class MonitorServiceTests
     public async Task Publish_when_an_OnChanged_subscriber_throws_still_notifies_the_others_and_logs_the_fault()
     {
         var logger = new FakeLogger<MonitorService>();
-        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var sut = new MonitorService(await ShippedConfig.LoadAsync(), new FakeTimeProvider(), logger);
         var laterCalls = 0;
         sut.OnChanged += (_, _) => throw new InvalidOperationException("UI is broken");
         sut.OnChanged += (_, _) => laterCalls++;
@@ -636,7 +636,7 @@ public sealed class MonitorServiceTests
     public async Task SetOnline_when_a_flushed_handler_faults_asynchronously_logs_the_fault()
     {
         var logger = new FakeLogger<MonitorService>();
-        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var sut = new MonitorService(await ShippedConfig.LoadAsync(), new FakeTimeProvider(), logger);
         sut.RegisterHandler("ERP", (_, _) => Task.FromException(new InvalidOperationException("ERP save failed")));
         sut.SetOnline("ERP", online: false);
         sut.Publish("account.updated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
