@@ -613,6 +613,25 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
+    public async Task Publish_when_an_OnChanged_subscriber_throws_still_notifies_the_others_and_logs_the_fault()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await TestConfig.LoadRealAsync(), new FakeTimeProvider(), logger);
+        var laterCalls = 0;
+        sut.OnChanged += (_, _) => throw new InvalidOperationException("UI is broken");
+        sut.OnChanged += (_, _) => laterCalls++;
+
+        sut.Publish("account.activated", "CRM", "c-1", Fields(("CustomerId", "CUST0001")));
+
+        Assert.Equal(1, laterCalls);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.Equal("UI is broken", record.Exception?.Message);
+    }
+
+
+
+    [Fact]
     public async Task SetOnline_when_a_flushed_handler_faults_asynchronously_logs_the_fault()
     {
         var logger = new FakeLogger<MonitorService>();
