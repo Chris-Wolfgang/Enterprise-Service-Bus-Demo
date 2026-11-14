@@ -20,9 +20,21 @@ public sealed record MonitorEntry
 
 
     /// <summary>
-    /// Gets the direction label: <c>→ SEND</c>, <c>← RECV</c> or <c>⚠ TIMEOUT</c>.
+    /// Gets whether the row records a send, a delivery or a timeout.
     /// </summary>
-    public string Direction { get; init; } = string.Empty;
+    public MonitorDirection Direction { get; init; }
+
+
+
+    /// <summary>
+    /// Gets the label the monitor shows for <see cref="Direction"/>: <c>→ SEND</c>, <c>← RECV</c> or <c>⚠ TIMEOUT</c>.
+    /// </summary>
+    public string DirectionLabel => Direction switch
+    {
+        MonitorDirection.Send => "→ SEND",
+        MonitorDirection.Receive => "← RECV",
+        _ => "⚠ TIMEOUT",
+    };
 
 
 

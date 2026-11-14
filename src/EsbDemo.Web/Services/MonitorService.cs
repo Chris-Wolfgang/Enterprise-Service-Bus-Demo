@@ -315,7 +315,7 @@ public sealed partial class MonitorService
                 {
                     Timestamp = now,
                     AppName = sourceApp,
-                    Direction = "→ SEND",
+                    Direction = MonitorDirection.Send,
                     Topic = topic,
                     CorrelationId = correlationId,
                     Summary = summary,
@@ -470,7 +470,7 @@ public sealed partial class MonitorService
         {
             Timestamp = now,
             AppName = app.Name,
-            Direction = "← RECV",
+            Direction = MonitorDirection.Receive,
             Topic = topic,
             CorrelationId = correlationId,
             Summary = isSelfOrigin
@@ -519,7 +519,7 @@ public sealed partial class MonitorService
             {
                 Timestamp = msg.Timestamp,
                 AppName = appName,
-                Direction = "← RECV",
+                Direction = MonitorDirection.Receive,
                 Topic = msg.Topic,
                 CorrelationId = msg.CorrelationId,
                 Summary = summary,
@@ -585,7 +585,7 @@ public sealed partial class MonitorService
                         {
                             Timestamp = _timeProvider.GetUtcNow(),
                             AppName = record.SourceApp,
-                            Direction = "⚠ TIMEOUT",
+                            Direction = MonitorDirection.Timeout,
                             Topic = "account.create",
                             CorrelationId = correlationId,
                             Summary = "No response from ERP after 10s — account creation pending",

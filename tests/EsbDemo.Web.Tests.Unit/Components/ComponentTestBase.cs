@@ -97,7 +97,7 @@ public abstract class ComponentTestBase : BunitContext, IAsyncLifetime
     /// <summary>The bus messages <paramref name="app"/> sent.</summary>
     protected MonitorEntry[] SentBy(string app) =>
         Monitor.Entries
-            .Where(e => string.Equals(e.AppName, app, StringComparison.Ordinal) && string.Equals(e.Direction, "→ SEND", StringComparison.Ordinal))
+            .Where(e => string.Equals(e.AppName, app, StringComparison.Ordinal) && e.Direction == MonitorDirection.Send)
             .ToArray();
 
 

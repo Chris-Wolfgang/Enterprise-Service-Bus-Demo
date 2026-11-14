@@ -31,12 +31,12 @@ public sealed class MonitorServiceTests
 
 
     private static MonitorEntry[] Sent(MonitorService sut, string topic) =>
-        sut.Entries.Where(e => string.Equals(e.Topic, topic, StringComparison.Ordinal) && string.Equals(e.Direction, "→ SEND", StringComparison.Ordinal)).ToArray();
+        sut.Entries.Where(e => string.Equals(e.Topic, topic, StringComparison.Ordinal) && e.Direction == MonitorDirection.Send).ToArray();
 
 
 
     private static MonitorEntry? Received(MonitorService sut, string topic, string app) =>
-        sut.Entries.SingleOrDefault(e => string.Equals(e.Topic, topic, StringComparison.Ordinal) && string.Equals(e.AppName, app, StringComparison.Ordinal) && string.Equals(e.Direction, "← RECV", StringComparison.Ordinal));
+        sut.Entries.SingleOrDefault(e => string.Equals(e.Topic, topic, StringComparison.Ordinal) && string.Equals(e.AppName, app, StringComparison.Ordinal) && e.Direction == MonitorDirection.Receive);
 
 
 
@@ -108,7 +108,7 @@ public sealed class MonitorServiceTests
 
         sut.Publish("account.deactivated", "CRM", "c-1", Fields(("CustomerId", "CUST0001"), ("Name", "Acme")));
 
-        var send = Assert.Single(sut.Entries, e => string.Equals(e.Direction, "→ SEND", StringComparison.Ordinal));
+        var send = Assert.Single(sut.Entries, e => e.Direction == MonitorDirection.Send);
         Assert.Equal("CRM", send.AppName);
         Assert.Equal("c-1", send.CorrelationId);
         Assert.Equal("CustomerId: CUST0001, Name: Acme", send.Summary);
@@ -117,7 +117,7 @@ public sealed class MonitorServiceTests
         Assert.Equal
         (
             new[] { "CRM", "ERP", "eCommerce", "Customer Portal", "Data Warehouse" },
-            sut.Entries.Where(e => string.Equals(e.Direction, "← RECV", StringComparison.Ordinal)).Select(e => e.AppName)
+            sut.Entries.Where(e => e.Direction == MonitorDirection.Receive).Select(e => e.AppName)
         );
     }
 
@@ -242,7 +242,7 @@ public sealed class MonitorServiceTests
 
         Assert.Equal(new[] { "CUST0001", "CUST0002" }, handled);
         Assert.Equal(0, sut.GetQueuedCount("ERP"));
-        var delivered = sut.Entries.Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && string.Equals(e.Direction, "← RECV", StringComparison.Ordinal)).ToArray();
+        var delivered = sut.Entries.Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && e.Direction == MonitorDirection.Receive).ToArray();
         Assert.Equal(new[] { "c-1", "c-2" }, delivered.Select(e => e.CorrelationId));
         Assert.All(delivered, e => Assert.Equal(sentAt, e.Timestamp));
         Assert.Equal("CustomerId: CUST0001", delivered[0].Summary);
@@ -310,7 +310,7 @@ public sealed class MonitorServiceTests
         Assert.Equal("Acme Corp 7", account.Fields["Name"]);
 
         time.Advance(MonitorService.AccountCreateTimeout);
-        Assert.DoesNotContain(sut.Entries, e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
+        Assert.DoesNotContain(sut.Entries, e => e.Direction == MonitorDirection.Timeout);
     }
 
 
@@ -325,9 +325,9 @@ public sealed class MonitorServiceTests
         sut.OnChanged += (_, _) => raised++;
 
         time.Advance(MonitorService.AccountCreateTimeout);
-        await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
+        await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => e.Direction == MonitorDirection.Timeout));
 
-        var timeout = sut.Entries.Single(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
+        var timeout = sut.Entries.Single(e => e.Direction == MonitorDirection.Timeout);
         Assert.Equal("CRM", timeout.AppName);
         Assert.Equal("topic-timeout", timeout.CssClass);
         Assert.Equal("Pending Create Finish", Assert.Single(sut.Accounts).Status);
@@ -522,7 +522,7 @@ public sealed class MonitorServiceTests
         sut.Publish("account.updated", "CRM", "u-3", Fields(("CustomerId", "CUST0001"), ("Email", "new@acme.com")));
 
         var summaries = sut.Entries
-            .Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && string.Equals(e.Direction, "← RECV", StringComparison.Ordinal))
+            .Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && e.Direction == MonitorDirection.Receive)
             .Select(e => e.Summary)
             .ToArray();
         Assert.Equal
@@ -660,9 +660,9 @@ public sealed class MonitorServiceTests
         sut.Publish("account.create", "eCommerce", "corr-1", Fields(("Name", "Second")), isUserInitiated: true);
 
         time.Advance(TimeSpan.FromSeconds(10));
-        await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal)));
+        await TestConfig.WaitUntilAsync(() => sut.Entries.Any(e => e.Direction == MonitorDirection.Timeout));
 
-        var timeout = Assert.Single(sut.Entries, e => string.Equals(e.Direction, "⚠ TIMEOUT", StringComparison.Ordinal));
+        var timeout = Assert.Single(sut.Entries, e => e.Direction == MonitorDirection.Timeout);
         Assert.Equal("eCommerce", timeout.AppName);
         Assert.Equal("Second", Assert.Single(sut.Accounts).Fields["Name"]);
     }
