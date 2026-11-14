@@ -1,6 +1,6 @@
-# Contributing to Wolfgang.Demo.EnterpriseServiceBus
+# Contributing to Enterprise Service Bus Demo
 
-Thank you for your interest in contributing to **Wolfgang.Demo.EnterpriseServiceBus**! We welcome contributions to help improve this project.
+Thank you for your interest in contributing to **Enterprise Service Bus Demo**! We welcome contributions to help improve this project.
 
 ## How Can You Contribute?
 
