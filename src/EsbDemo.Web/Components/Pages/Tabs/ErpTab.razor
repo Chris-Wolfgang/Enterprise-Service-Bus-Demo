@@ -1,4 +1,3 @@
-@using System.Globalization
 @inject IDbContextFactory<ErpDbContext> DbFactory
 @inject ErpConnector Connector
 @inject TimeProvider Clock
@@ -48,7 +47,7 @@
             @if (cust != null)
             {
                 var isActive = cust.IsActive;
-                var closedStr = cust.ClosedDate.HasValue ? cust.ClosedDate.Value.ToString("MM/dd/yy") : "";
+                var closedStr = cust.ClosedDate.HasValue ? cust.ClosedDate.Value.ToString("MM/dd/yy", CultureInfo.InvariantCulture) : "";
                 <div class="erp-trow erp-trow-dim">@Divider</div>
                 <div class="erp-trow">&nbsp;</div>
                 <div class="erp-trow"><span class="erp-lbl">  CUST# ..... </span><span class="erp-val">@cust.CustNum.PadRight(14)</span><span class="erp-lbl">STATUS: </span><span class="@(isActive ? "erp-val-green" : "erp-val-red")">@(isActive ? "ACTIVE" : "INACTIVE")</span></div>
@@ -59,7 +58,7 @@
                 <div class="erp-trow"><span class="erp-lbl">  PHONE ..... </span>@if (_mode == ErpMode.Edit){<input class="erp-input" @bind="_editPhone" @bind:event="oninput" maxlength="15" />}else{<span class="erp-val">@(cust.Phone ?? "N/A")</span>}</div>
                 <div class="erp-trow">&nbsp;</div>
                 <div class="erp-trow"><span class="erp-lbl">  TYPE ...... </span><span class="erp-val">@cust.CustType.PadRight(12)</span><span class="erp-lbl">TERMS: </span><span class="erp-val">@(cust.Terms ?? "—")</span></div>
-                <div class="erp-trow"><span class="erp-lbl">  CREDIT LIM  </span><span class="erp-val-yellow">@cust.CreditLim.ToString("N2")</span></div>
+                <div class="erp-trow"><span class="erp-lbl">  CREDIT LIM  </span><span class="erp-val-yellow">@cust.CreditLim.ToString("N2", CultureInfo.InvariantCulture)</span></div>
                 <div class="erp-trow">&nbsp;</div>
                 <div class="erp-trow erp-trow-dim">@Divider</div>
                 <div class="erp-trow">&nbsp;</div>
