@@ -64,7 +64,7 @@
                             @(acct.StatusCode == AccountStatusCode.Active ? "Active" : "Inactive")
                         </button>
                     </td>
-                    <td class="mono small">@acct.ModifiedOn.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="mono small">@acct.ModifiedOn.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)</td>
                 </tr>
                 @if (isEditing)
                 {

@@ -57,7 +57,7 @@
                     </td>
                     <td class="mono small">@(cust.PortalLogin ?? "—")</td>
                     <td><span class="badge @(cust.IsActive ? "status-active" : "status-inactive")">@(cust.IsActive ? "Active" : "Inactive")</span></td>
-                    <td class="mono small">@cust.CreatedDate.ToString("yyyy-MM-dd")</td>
+                    <td class="mono small">@cust.CreatedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</td>
                 </tr>
                 @if (cust.CustNum == _editId)
                 {
