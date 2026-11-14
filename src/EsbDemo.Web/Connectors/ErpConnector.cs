@@ -50,7 +50,8 @@ public sealed class ErpConnector
     {
         ArgumentNullException.ThrowIfNull(cust);
         _monitor.Publish(
-            "account.updated", "ERP",
+            topic: "account.updated",
+            sourceApp: "ERP",
             correlationId: cust.CustNum,
             fields: new Dictionary<string, string>
             {
@@ -80,7 +81,8 @@ public sealed class ErpConnector
         var topic = wasActive ? "account.deactivated" : "account.activated";
 
         _monitor.Publish(
-            topic, "ERP",
+            topic: topic,
+            sourceApp: "ERP",
             correlationId: cust.CustNum,
             fields: new Dictionary<string, string>
             {
@@ -99,7 +101,8 @@ public sealed class ErpConnector
     {
         ArgumentNullException.ThrowIfNull(cust);
         _monitor.Publish(
-            "account.created", "ERP",
+            topic: "account.created",
+            sourceApp: "ERP",
             correlationId: cust.CustNum,
             fields: new Dictionary<string, string>
             {

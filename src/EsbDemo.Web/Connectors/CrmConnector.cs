@@ -49,7 +49,8 @@ public sealed class CrmConnector
     {
         ArgumentNullException.ThrowIfNull(acct);
         _monitor.Publish(
-            "account.updated", "CRM",
+            topic: "account.updated",
+            sourceApp: "CRM",
             correlationId: acct.AccountId.ToString(),
             fields: new Dictionary<string, string>
             {
@@ -76,7 +77,8 @@ public sealed class CrmConnector
             : "account.deactivated";
 
         _monitor.Publish(
-            topic, "CRM",
+            topic: topic,
+            sourceApp: "CRM",
             correlationId: acct.AccountId.ToString(),
             fields: new Dictionary<string, string>
             {

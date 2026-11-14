@@ -292,7 +292,8 @@ public sealed partial class MonitorService
         string sourceApp,
         string? correlationId,
         Dictionary<string, string> fields,
-        bool isUserInitiated = false)
+        bool isUserInitiated = false
+    )
     {
         if (fields is null) throw new ArgumentNullException(nameof(fields));
 
@@ -460,7 +461,8 @@ public sealed partial class MonitorService
         DateTimeOffset now,
         bool isUserInitiated,
         List<HandlerCall> handlerCalls,
-        Dictionary<string, string>? oldAccountFields = null)
+        Dictionary<string, string>? oldAccountFields = null
+    )
     {
         var isSelfOrigin = string.Equals(app.Name, sourceApp, StringComparison.OrdinalIgnoreCase);
 
@@ -543,7 +545,8 @@ public sealed partial class MonitorService
         string? correlationId,
         Dictionary<string, string> fields,
         bool isUserInitiated,
-        string originalSourceApp)
+        string originalSourceApp
+    )
     {
         if (!isUserInitiated) return;
 
@@ -609,7 +612,8 @@ public sealed partial class MonitorService
         string respondingApp,
         string? correlationId,
         Dictionary<string, string> originalFields,
-        string originalSourceApp)
+        string originalSourceApp
+    )
     {
         await Task.Delay(AutoResponseDelay, _timeProvider, CancellationToken.None).ConfigureAwait(false);
 
@@ -645,7 +649,8 @@ public sealed partial class MonitorService
         string respondingApp,
         string originalSourceApp,
         string? originalCorrelationId,
-        Dictionary<string, string> mergedFields)
+        Dictionary<string, string> mergedFields
+    )
     {
         if (!string.Equals(responseTopic, "account.created", StringComparison.Ordinal))
             return originalCorrelationId;
@@ -786,7 +791,8 @@ public sealed partial class MonitorService
         string appName,
         string topic,
         Dictionary<string, string> fields,
-        Dictionary<string, string>? oldFields = null)
+        Dictionary<string, string>? oldFields = null
+    )
     {
         if (string.Equals(topic, "account.created", StringComparison.Ordinal))
         {

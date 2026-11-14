@@ -49,7 +49,8 @@ public sealed class ECommerceConnector
     {
         ArgumentNullException.ThrowIfNull(cust);
         _monitor.Publish(
-            "account.updated", "eCommerce",
+            topic: "account.updated",
+            sourceApp: "eCommerce",
             correlationId: cust.CustNum,
             fields: new Dictionary<string, string>
             {

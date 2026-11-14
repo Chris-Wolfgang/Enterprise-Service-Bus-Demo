@@ -49,7 +49,8 @@ public sealed class CustomerPortalConnector
     {
         ArgumentNullException.ThrowIfNull(cust);
         _monitor.Publish(
-            "account.updated", "Customer Portal",
+            topic: "account.updated",
+            sourceApp: "Customer Portal",
             correlationId: cust.CustNum,
             fields: new Dictionary<string, string>
             {
