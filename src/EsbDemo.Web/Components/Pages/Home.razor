@@ -42,14 +42,14 @@
                     <tbody>
                         @foreach (var entry in entries)
                         {
-                            var isSend = entry.Direction == "→ SEND";
+                            var isSend = entry.Direction == MonitorDirection.Send;
                             var rowClass = $"{(isSend ? "row-send" : "row-recv")} {(entry.IsQueued ? "queued" : "")}".Trim();
                             <tr class="@rowClass">
                                 <td class="col-time">@entry.Timestamp.ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
                                 <td class="col-topic"><span class="topic-badge @entry.CssClass">@entry.Topic</span></td>
                                 <td class="col-app">@entry.AppName</td>
                                 <td class="col-dir">
-                                    <span class="dir-badge @(isSend ? "dir-send" : "dir-recv")">@entry.Direction</span>
+                                    <span class="dir-badge @(isSend ? "dir-send" : "dir-recv")">@entry.DirectionLabel</span>
                                 </td>
                                 <td class="col-corr">@(entry.CorrelationId ?? "—")</td>
                                 <td class="col-summary">@entry.Summary</td>

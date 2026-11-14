@@ -20,7 +20,7 @@ public sealed class ConnectorTests
         Assert.Single
         (
             h.Monitor.Entries,
-            e => string.Equals(e.AppName, app, StringComparison.Ordinal) && string.Equals(e.Direction, "→ SEND", StringComparison.Ordinal)
+            e => string.Equals(e.AppName, app, StringComparison.Ordinal) && e.Direction == MonitorDirection.Send
         );
 
 
@@ -126,7 +126,7 @@ public sealed class ConnectorTests
         h.Erp.PublishStatusChanged(cust, wasActive: false);
         h.Erp.PublishNew(cust);
 
-        var sent = h.Monitor.Entries.Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && string.Equals(e.Direction, "→ SEND", StringComparison.Ordinal)).ToArray();
+        var sent = h.Monitor.Entries.Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && e.Direction == MonitorDirection.Send).ToArray();
         Assert.Equal(new[] { "account.updated", "account.deactivated", "account.activated", "account.created" }, sent.Select(e => e.Topic));
         Assert.All(sent, e => Assert.Equal("CUST0001", e.CorrelationId));
         Assert.Equal("CustomerId: CUST0001, Name: Acme, Email: , Phone: ", sent[0].Summary);
