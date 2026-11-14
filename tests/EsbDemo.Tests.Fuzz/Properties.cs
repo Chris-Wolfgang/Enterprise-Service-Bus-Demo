@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using CsCheck;
 using EsbDemo.Core.Services;
+using EsbDemo.Web.Models;
 using EsbDemo.Web.Services;
 using Microsoft.Extensions.Time.Testing;
 
@@ -228,8 +229,8 @@ public sealed class Properties
                     sut.Publish(topic, source, "corr", fields);
 
                     var subscribers = config.Apps.Where(a => a.Subscribes.Contains(topic)).Select(a => a.Name).ToArray();
-                    var sends = sut.Entries.Count(e => string.Equals(e.Direction, "→ SEND", StringComparison.Ordinal));
-                    var receivers = sut.Entries.Where(e => string.Equals(e.Direction, "← RECV", StringComparison.Ordinal)).Select(e => e.AppName);
+                    var sends = sut.Entries.Count(e => e.Direction == MonitorDirection.Send);
+                    var receivers = sut.Entries.Where(e => e.Direction == MonitorDirection.Receive).Select(e => e.AppName);
 
                     return sends == 1
                         && receivers.SequenceEqual(subscribers, StringComparer.Ordinal)
