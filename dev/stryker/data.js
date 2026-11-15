@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794144594336,
+  "lastUpdate": 1794750103383,
   "repoUrl": "https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo",
   "entries": {
     "Mutation score": [
@@ -73,6 +73,43 @@ window.BENCHMARK_DATA = {
           {
             "name": "Mutation score (tests/EsbDemo.Web.Tests.Unit (defaults))",
             "value": 62.47,
+            "unit": "%"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Chris Wolfgang",
+            "username": "Chris-Wolfgang",
+            "email": "210299580+Chris-Wolfgang@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "11c52cfe85bfc30ef6c4590690154ead1753bf41",
+          "message": "build: test EsbDemo.Core on net11.0 and pin the SDK to 11.0 (#246)\n\n- tests/EsbDemo.Core.Tests.Unit: append net11.0 to TargetFrameworks (one\n  line) with the same package set as net10.0 (xunit 2.9.3, runner 3.1.5,\n  Test.Sdk 18.0.1, coverlet 10.1.0).\n- global.json: 10.0.100 -> 11.0.100, rollForward latestFeature. SDK 10\n  cannot build a net11.0 TFM (NETSDK1045); repo-template#831 names this\n  per-repo bump as the net11.0 issue's job.\n\nRefs #227.\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-14T14:29:21Z",
+          "url": "https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo/commit/11c52cfe85bfc30ef6c4590690154ead1753bf41"
+        },
+        "date": 1794750101320,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "Mutation score (tests/EsbDemo.Core.Tests.Unit (defaults))",
+            "value": 100,
+            "unit": "%"
+          },
+          {
+            "name": "Mutation score (tests/EsbDemo.Tests.Fuzz (defaults))",
+            "value": 0,
+            "unit": "%"
+          },
+          {
+            "name": "Mutation score (tests/EsbDemo.Web.Tests.Unit (defaults))",
+            "value": 0,
             "unit": "%"
           }
         ]
