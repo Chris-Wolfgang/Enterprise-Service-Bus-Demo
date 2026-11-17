@@ -10,7 +10,7 @@
       "rollForward": true
     },
     "nuget-license": {
-      "version": "4.0.18",
+      "version": "4.0.19",
       "commands": [
         "nuget-license"
       ],
@@ -31,7 +31,7 @@
       "rollForward": true
     },
     "microsoft.cst.devskim.cli": {
-      "version": "1.0.100",
+      "version": "1.0.103",
       "commands": [
         "devskim"
       ],
