@@ -4,7 +4,7 @@ This guide gets the Enterprise Service Bus Demo running locally.
 
 ## Prerequisites
 
-- The [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- The [.NET 11 SDK](https://dotnet.microsoft.com/download), the version `global.json` pins (the web app itself targets `net10.0`)
 
 ## Run the demo
 

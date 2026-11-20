@@ -25,7 +25,7 @@ The bus selector offers only the **Mock In-Memory** bus today; Apache Kafka and 
 
 ## 🚀 Run the demo
 
-Prerequisite: the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Prerequisite: the [.NET 11 SDK](https://dotnet.microsoft.com/download) (`global.json` pins SDK `11.0.100` with `rollForward: latestFeature`; the web app itself targets `net10.0`).
 
 ```bash
 git clone https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo.git
@@ -54,7 +54,7 @@ The systems and messages are data, not code - edit the JSON files in `src/EsbDem
 |---------|---------|
 | `src/EsbDemo.Core` (`netstandard2.0`) | Config model (`AppConfig`, `TopicConfig`) and the placeholder resolver. |
 | `src/EsbDemo.Web` (`net10.0`) | The Blazor Server app: `MonitorService` (the in-memory bus), one connector and one EF Core in-memory database per system, and the UI. |
-| `tests/EsbDemo.Core.Tests.Unit` | Unit tests for Core, run on every TFM from .NET Framework 4.6.2 to .NET 10. |
+| `tests/EsbDemo.Core.Tests.Unit` | Unit tests for Core, run on every TFM from .NET Framework 4.6.2 to .NET 11. |
 | `tests/EsbDemo.Web.Tests.Unit` | Unit and bUnit component tests for the web app. |
 | `tests/EsbDemo.Tests.Fuzz` | Property-based (CsCheck) tests. |
 
@@ -110,7 +110,7 @@ This project uses **`BannedSymbols.txt`** to prohibit synchronous APIs and enfor
 ## 🛠️ Building from Source
 
 ### Prerequisites
-- [.NET 10 SDK](https://dotnet.microsoft.com/download) (the Core tests also run on the older .NET and .NET Framework TFMs when their runtimes are installed)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download), the version `global.json` pins (the Core tests also run on the older .NET and .NET Framework TFMs when their runtimes are installed)
 - Optional: [PowerShell Core](https://github.com/PowerShell/PowerShell) for the scripts in `scripts/`
 
 ### Build Steps

@@ -5,7 +5,7 @@
 This repository is the **Enterprise Service Bus Demo**: a Blazor Server application in which six simulated business systems (CRM, ERP, eCommerce, WMS, Customer Portal, Data Warehouse) exchange messages over an in-memory bus. It is an application, not a library - nothing is published to NuGet.
 
 **Repository Type**: Working application (created from the fleet repo-template)
-**Target Platforms**: `EsbDemo.Web` targets `net10.0`; `EsbDemo.Core` targets `netstandard2.0` and its tests run on .NET Framework 4.6.2-4.8.1, .NET Core 3.1 and .NET 5.0-10.0
+**Target Platforms**: `EsbDemo.Web` targets `net10.0`; `EsbDemo.Core` targets `netstandard2.0` and its tests run on .NET Framework 4.6.2-4.8.1, .NET Core 3.1 and .NET 5.0-11.0
 **Primary Language**: C# (Razor components)
 
 ### Solution structure (`Enterprise-Service-Bus-Demo.slnx`)
@@ -17,7 +17,7 @@ This repository is the **Enterprise Service Bus Demo**: a Blazor Server applicat
 ## Build and Validation Instructions
 
 ### Prerequisites
-- .NET 10 SDK (older runtimes only for the Core test TFMs)
+- .NET 11 SDK, the version `global.json` pins (older runtimes only for the Core test TFMs)
 - PowerShell 7 for `scripts/build-pr.ps1`
 
 ### Local gate
@@ -50,7 +50,7 @@ Run the app with `dotnet run --project src/EsbDemo.Web`.
 ### Continuous Integration Pipeline (`.github/workflows/pr.yaml`)
 The workflow runs on pull requests to `main` branch and includes:
 
-1. **Environment**: Ubuntu Latest with .NET 5.0–10.0 (Windows adds .NET Framework 4.6.2–4.8.1)
+1. **Environment**: Ubuntu Latest with .NET 5.0–11.0 (Windows adds .NET Framework 4.6.2–4.8.1)
 2. **Build Steps**: Checkout → Setup .NET → Restore → Build → Test → Coverage → Security
 3. **Artifacts**: Coverage reports and DevSkim results uploaded
 4. **Branch Protection**: Configured to require this workflow to pass before merging
