@@ -385,4 +385,96 @@ public sealed class TabTests : ComponentTestBase
         Assert.Contains("DW New", added, StringComparison.Ordinal);
         Assert.Contains("—", added, StringComparison.Ordinal);
     }
+
+
+    // ── Offline systems ──────────────────────────────────────────────────
+
+    [Fact]
+    public void CrmTab_when_the_CRM_goes_offline_shows_a_banner_and_disables_saving_and_status_changes()
+    {
+        var cut = Render<CrmTab>();
+        Assert.Empty(cut.FindAll(".tab-offline-banner"));
+
+        Monitor.SetOnline("CRM", online: false);
+        cut.WaitForAssertion(() => Assert.Contains("CRM is offline", cut.Find(".tab-offline-banner").TextContent, StringComparison.Ordinal));
+
+        Assert.All(cut.FindAll(".status-toggle"), b => Assert.True(b.HasAttribute("disabled")));
+        cut.FindAll("tbody tr")[0].Click();
+        Assert.True(cut.Find(".btn-save").HasAttribute("disabled"));
+
+        Monitor.Publish("order.shipped", "WMS", "o-1", Fields(("OrderId", "ERP-0001")));
+        Monitor.SetOnline("CRM", online: true);
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".tab-offline-banner")));
+        Assert.False(cut.Find(".btn-save").HasAttribute("disabled"));
+        Assert.Empty(SentBy("CRM"));
+    }
+
+
+
+    [Fact]
+    public async Task CrmTab_when_offline_and_a_save_or_status_change_still_arrives_changes_and_publishes_nothing()
+    {
+        var cut = Render<CrmTab>();
+        cut.FindAll("tbody tr")[0].Click();
+        cut.FindAll(".cell-input")[0].Input("Offline Rename");
+        Monitor.SetOnline("CRM", online: false);
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".tab-offline-banner")));
+
+        // A click that was already in flight when the system went offline reaches the handler
+        // even though the button is now disabled.
+        await cut.InvokeAsync(() => cut.Find(".btn-save").TriggerEventAsync("onclick", new Microsoft.AspNetCore.Components.Web.MouseEventArgs()));
+        await cut.InvokeAsync(() => cut.FindAll(".status-toggle")[1].TriggerEventAsync("onclick", new Microsoft.AspNetCore.Components.Web.MouseEventArgs()));
+
+        Assert.Empty(SentBy("CRM"));
+        Assert.Equal("Acme Corporation", Query<CrmDbContext, string>(db => db.Accounts.Single(a => a.AccountNumber == "CUST0001").Name));
+        Assert.Equal(AccountStatusCode.Active, Query<CrmDbContext, AccountStatusCode>(db => db.Accounts.Single(a => a.AccountNumber == "CUST0002").StatusCode));
+    }
+
+
+
+    [Fact]
+    public void ErpTab_when_the_ERP_is_offline_shows_a_banner_and_its_keys_save_and_publish_nothing()
+    {
+        Monitor.SetOnline("ERP", online: false);
+        var cut = Render<ErpTab>();
+        Assert.Contains("ERP OFFLINE", cut.Find(".tab-offline-banner").TextContent, StringComparison.Ordinal);
+
+        cut.FindAll(".erp-roster-row")[0].Click();
+        ByText(cut, ".erp-key", "[F3=DEACTIVATE]").Click();
+        ByText(cut, ".erp-key", "[F1=EDIT]").Click();
+        cut.FindAll(".erp-input")[0].Input("OFFLINE RENAME");
+        ByText(cut, ".erp-key", "[F2=SAVE]").Click();
+        cut.Find(".erp-roster-new").Click();
+        cut.FindAll(".erp-input")[0].Input("Offline Co");
+        ByText(cut, ".erp-key", "[F2=SAVE]").Click();
+
+        Assert.Empty(SentBy("ERP"));
+        var acme = Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0001"));
+        Assert.Equal(("Acme Corporation", null), (acme.Name, acme.ClosedDate));
+        Assert.Equal(5, Query<ErpDbContext, int>(db => db.CustMast.Count()));
+    }
+
+
+
+    [Fact]
+    public async Task ECommerce_and_Portal_tabs_when_their_system_is_offline_disable_saving_and_publish_nothing()
+    {
+        Monitor.SetOnline("eCommerce", online: false);
+        Monitor.SetOnline("Customer Portal", online: false);
+        var shop = Render<ECommerceTab>();
+        var portal = Render<CustomerPortalTab>();
+
+        Assert.Contains("eCommerce is offline", shop.Find(".tab-offline-banner").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Customer Portal is offline", portal.Find(".tab-offline-banner").TextContent, StringComparison.Ordinal);
+        shop.FindAll("tbody tr")[0].Click();
+        portal.FindAll("tbody tr")[0].Click();
+        Assert.True(shop.Find(".btn-save").HasAttribute("disabled"));
+        Assert.True(portal.Find(".btn-save").HasAttribute("disabled"));
+
+        await shop.InvokeAsync(() => shop.Find(".btn-save").TriggerEventAsync("onclick", new Microsoft.AspNetCore.Components.Web.MouseEventArgs()));
+        await portal.InvokeAsync(() => portal.Find(".btn-save").TriggerEventAsync("onclick", new Microsoft.AspNetCore.Components.Web.MouseEventArgs()));
+
+        Assert.Empty(SentBy("eCommerce"));
+        Assert.Empty(SentBy("Customer Portal"));
+    }
 }

@@ -1,6 +1,7 @@
 @inject IDbContextFactory<CrmDbContext> DbFactory
 @inject TimeProvider Clock
 @inject CrmConnector Connector
+@inject MonitorService Monitor
 @implements IDisposable
 
 <div class="app-tab crm-tab">
@@ -8,6 +9,10 @@
         <h2>CRM — Accounts</h2>
         <span class="app-tag crm-tag">Microsoft Dynamics style</span>
     </div>
+    @if (IsOffline)
+    {
+        <div class="tab-offline-banner">CRM is offline: changes cannot be saved or published until it is back online.</div>
+    }
 
     <table class="data-grid">
         <thead>
@@ -60,6 +65,7 @@
                     <td><span class="badge type-badge">@acct.AccountTypeCode</span></td>
                     <td @onclick:stopPropagation>
                         <button class="status-toggle @(acct.StatusCode == AccountStatusCode.Active ? "status-toggle-active" : "status-toggle-inactive")"
+                                disabled="@IsOffline"
                                 @onclick="() => ToggleStatus(acct)">
                             @(acct.StatusCode == AccountStatusCode.Active ? "Active" : "Inactive")
                         </button>
@@ -71,7 +77,7 @@
                     <tr class="edit-row">
                         <td colspan="7">
                             <div class="edit-actions">
-                                <button class="btn-save" @onclick="SaveEdit" @onclick:stopPropagation>Save &amp; Publish</button>
+                                <button class="btn-save" disabled="@IsOffline" @onclick="SaveEdit" @onclick:stopPropagation>Save &amp; Publish</button>
                                 <button class="btn-cancel" @onclick="CancelEdit" @onclick:stopPropagation>Cancel</button>
                                 <span class="edit-hint">Publishes <code>account.updated</code> · Click status button to publish <code>account.deactivated</code> / <code>account.activated</code></span>
                             </div>
@@ -89,21 +95,29 @@
     private string _editName = "";
     private string _editEmail = "";
     private string _editPhone = "";
+    private AppOnlineWatch? _online;
+
+    private bool IsOffline => _online?.IsOffline == true;
 
     /// <summary>
     /// Loads the CRM accounts and subscribes to <see cref="CrmConnector.DataChanged"/> so the list reloads
-    /// when a bus message changes the data.
+    /// when a bus message changes the data, and watches whether the CRM is online.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        _online = new AppOnlineWatch(Monitor, "CRM", () => InvokeAsync(StateHasChanged));
         _accounts = await LoadAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
     /// <summary>
-    /// Unsubscribes from <see cref="CrmConnector.DataChanged"/>.
+    /// Unsubscribes from <see cref="CrmConnector.DataChanged"/> and stops watching the CRM's online state.
     /// </summary>
-    public void Dispose() => Connector.DataChanged -= OnDataChanged;
+    public void Dispose()
+    {
+        Connector.DataChanged -= OnDataChanged;
+        _online?.Dispose();
+    }
 
     private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
@@ -125,6 +139,7 @@
 
     private async Task SaveEdit()
     {
+        if (IsOffline) return;
         var acct = _accounts.FirstOrDefault(a => a.AccountId == _editId);
         if (acct is null) return;
 
@@ -141,6 +156,7 @@
 
     private async Task ToggleStatus(CrmAccount acct)
     {
+        if (IsOffline) return;
         var newStatus = acct.StatusCode == AccountStatusCode.Active
             ? AccountStatusCode.Inactive
             : AccountStatusCode.Active;

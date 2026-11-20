@@ -1,5 +1,6 @@
 @inject IDbContextFactory<CustomerPortalDbContext> DbFactory
 @inject CustomerPortalConnector Connector
+@inject MonitorService Monitor
 @implements IDisposable
 
 <div class="app-tab portal-tab">
@@ -7,6 +8,10 @@
         <h2>Customer Portal — Accounts</h2>
         <span class="app-tag portal-tag">Self-service portal</span>
     </div>
+    @if (IsOffline)
+    {
+        <div class="tab-offline-banner">Customer Portal is offline: changes cannot be saved or published until it is back online.</div>
+    }
 
     <table class="data-grid">
         <thead>
@@ -64,7 +69,7 @@
                     <tr class="edit-row">
                         <td colspan="7">
                             <div class="edit-actions">
-                                <button class="btn-save" @onclick="SaveEdit">Save &amp; Publish</button>
+                                <button class="btn-save" disabled="@IsOffline" @onclick="SaveEdit">Save &amp; Publish</button>
                                 <button class="btn-cancel" @onclick="CancelEdit">Cancel</button>
                                 <span class="edit-hint">Saving will publish an <code>account.updated</code> message to the ESB</span>
                             </div>
@@ -83,20 +88,29 @@
     private string _editEmail = "";
     private string _editPhone = "";
 
+    private AppOnlineWatch? _online;
+
+    private bool IsOffline => _online?.IsOffline == true;
+
     /// <summary>
     /// Loads the portal's customers and subscribes to <see cref="CustomerPortalConnector.DataChanged"/> so the list reloads
     /// when a bus message changes the data.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        _online = new AppOnlineWatch(Monitor, "Customer Portal", () => InvokeAsync(StateHasChanged));
         _customers = await LoadAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
     /// <summary>
-    /// Unsubscribes from <see cref="CustomerPortalConnector.DataChanged"/>.
+    /// Unsubscribes from <see cref="CustomerPortalConnector.DataChanged"/> and stops watching the system's online state.
     /// </summary>
-    public void Dispose() => Connector.DataChanged -= OnDataChanged;
+    public void Dispose()
+    {
+        Connector.DataChanged -= OnDataChanged;
+        _online?.Dispose();
+    }
 
     private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
@@ -118,6 +132,7 @@
 
     private async Task SaveEdit()
     {
+        if (IsOffline) return;
         var cust = _customers.FirstOrDefault(c => c.CustNum == _editId);
         if (cust is null) return;
         cust.Name = _editName;

@@ -1,5 +1,6 @@
 @inject IDbContextFactory<ErpDbContext> DbFactory
 @inject ErpConnector Connector
+@inject MonitorService Monitor
 @inject TimeProvider Clock
 @implements IDisposable
 
@@ -9,7 +10,14 @@
     <div class="erp-terminal">
         <div class="erp-trow erp-trow-title">*** PRELUDE/SQL  CUSTOMER MASTER  VER 4.2 ***</div>
         <div class="erp-trow erp-trow-dim">@_clock</div>
-        <div class="erp-trow">&nbsp;</div>
+        @if (IsOffline)
+        {
+            <div class="erp-trow erp-val-red tab-offline-banner">*** ERP OFFLINE - CHANGES ARE NOT SAVED OR PUBLISHED ***</div>
+        }
+        else
+        {
+            <div class="erp-trow">&nbsp;</div>
+        }
 
         @if (_mode == ErpMode.List)
         {
@@ -113,6 +121,9 @@
     private string _newCustNum = "";
     private string _clock = "";
     private PeriodicTimer? _timer;
+    private AppOnlineWatch? _online;
+
+    private bool IsOffline => _online?.IsOffline == true;
 
     /// <summary>
     /// Loads the ERP customer master and subscribes to <see cref="ErpConnector.DataChanged"/> so the list reloads
@@ -121,6 +132,7 @@
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        _online = new AppOnlineWatch(Monitor, "ERP", () => InvokeAsync(StateHasChanged));
         _customers = await LoadAsync();
         _clock = BuildClock();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
@@ -139,12 +151,13 @@
     }
 
     /// <summary>
-    /// Unsubscribes from <see cref="ErpConnector.DataChanged"/> and stops the terminal clock.
+    /// Unsubscribes from <see cref="ErpConnector.DataChanged"/>, stops the terminal clock and stops watching the ERP's online state.
     /// </summary>
     public void Dispose()
     {
         Connector.DataChanged -= OnDataChanged;
         _timer?.Dispose();
+        _online?.Dispose();
     }
 
     private void OnDataChanged(object? sender, EventArgs e) =>
@@ -187,6 +200,7 @@
 
     private async Task SaveEdit()
     {
+        if (IsOffline) return;
         var cust = _customers.FirstOrDefault(c => c.CustNum == _activeCustNum);
         if (cust is null) return;
         cust.Name    = _editName;
@@ -203,6 +217,7 @@
 
     private async Task ToggleStatus()
     {
+        if (IsOffline) return;
         var cust = _customers.FirstOrDefault(c => c.CustNum == _activeCustNum);
         if (cust is null) return;
 
@@ -235,6 +250,7 @@
 
     private async Task SaveNew()
     {
+        if (IsOffline) return;
         if (string.IsNullOrWhiteSpace(_editName)) return;
 
         var now = Clock.GetUtcNow().UtcDateTime;
