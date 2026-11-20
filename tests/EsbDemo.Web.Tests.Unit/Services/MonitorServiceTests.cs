@@ -672,6 +672,55 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
+    public async Task PublishAndApplyAsync_when_the_source_has_a_handler_applies_the_message_to_it_before_publishing()
+    {
+        var (sut, _) = await CreateAsync();
+        var calls = new List<(string Topic, string Name, int EntriesAtCall)>();
+        sut.RegisterHandler("ERP", (topic, fields) =>
+        {
+            calls.Add((topic, fields["Name"], sut.Entries.Count));
+            return Task.CompletedTask;
+        });
+
+        await sut.PublishAndApplyAsync("account.created", "ERP", "CUST0042", Fields(("CustomerId", "CUST0042"), ("Name", "Panel Co")), isUserInitiated: true);
+
+        Assert.Equal(("account.created", "Panel Co", 0), Assert.Single(calls));
+        Assert.Equal("CUST0042", Assert.Single(Sent(sut, "account.created")).CorrelationId);
+    }
+
+
+
+    [Fact]
+    public async Task PublishAndApplyAsync_when_the_source_handler_faults_logs_it_and_still_publishes()
+    {
+        var logger = new FakeLogger<MonitorService>();
+        var sut = new MonitorService(await ShippedConfig.LoadAsync(), new FakeTimeProvider(), logger);
+        sut.RegisterHandler("CRM", (_, _) => Task.FromException(new InvalidOperationException("CRM save failed")));
+
+        await sut.PublishAndApplyAsync("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0001"), ("Name", "Acme")));
+
+        Assert.Single(Sent(sut, "account.updated"));
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal("CRM save failed", record.Exception?.Message);
+        Assert.Contains("CRM handler for its own account.updated", record.Message, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task PublishAndApplyAsync_when_the_source_has_no_handler_only_publishes_and_null_fields_throw()
+    {
+        var (sut, _) = await CreateAsync();
+
+        await sut.PublishAndApplyAsync("order.shipped", "WMS", "o-1", Fields(("OrderId", "ERP-0001")));
+
+        Assert.Single(Sent(sut, "order.shipped"));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.PublishAndApplyAsync("order.shipped", "WMS", "o-2", null!));
+    }
+
+
+
+    [Fact]
     public async Task Publish_when_an_OnChanged_subscriber_throws_still_notifies_the_others_and_logs_the_fault()
     {
         var logger = new FakeLogger<MonitorService>();
