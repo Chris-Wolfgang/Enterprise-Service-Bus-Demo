@@ -13,7 +13,7 @@ An interactive demo of how an ESB can help your organization connect various sys
 
 A Blazor Server app (`src/EsbDemo.Web`) with six simulated business systems - **CRM**, **ERP**, **eCommerce**, **WMS**, **Customer Portal** and **Data Warehouse** - connected through an in-memory message bus:
 
-- Each system has its own tab and its own in-memory database. Creating, editing, deactivating or re-activating a customer (or placing an order) in one system **publishes** a message on a topic such as `account.create`, `account.updated` or `order.place`.
+- Each system has its own tab and its own in-memory database. Editing, deactivating or re-activating a customer in a tab (or creating one in the ERP tab) **publishes** a message on a topic such as `account.updated` or `account.created`. The **app panel** buttons publish any topic a system is configured for, including the requests `account.create` ("Create Customer") and `order.place` ("Place Order"), which no tab offers.
 - Every system that **subscribes** to that topic receives the message and updates its own data, so a change made in one tab shows up in the others.
 - Some systems **auto-respond**: the ERP answers `account.create` with `account.created` (minting the customer number) and `order.place` with `order.placed`. If no `account.created` arrives within 10 seconds, the request is flagged as timed out.
 - The **app panel** on the left takes any system **offline**; messages for it are queued and delivered, in order, when it comes back online (shown dimmed in the log).
