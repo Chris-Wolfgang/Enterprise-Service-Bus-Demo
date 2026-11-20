@@ -42,6 +42,27 @@ await using (scope.ConfigureAwait(false))
     await scope.ServiceProvider.GetRequiredService<ECommerceDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
     await scope.ServiceProvider.GetRequiredService<CustomerPortalDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
     await scope.ServiceProvider.GetRequiredService<DataWarehouseDbContext>().Database.EnsureCreatedAsync().ConfigureAwait(false);
+
+    // Offer the seeded customers in the app panel's customer pickers. The ERP customer master is
+    // the system of record for customer numbers.
+    var monitor = app.Services.GetRequiredService<MonitorService>();
+    var erpCustomers = await scope.ServiceProvider
+        .GetRequiredService<ErpDbContext>()
+        .CustMast
+        .AsNoTracking()
+        .ToListAsync()
+        .ConfigureAwait(false);
+    foreach (var cust in erpCustomers)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["CustomerId"] = cust.CustNum,
+            ["Name"]       = cust.Name
+        }
+        .AddIfSet("Email", cust.Email)
+        .AddIfSet("Phone", cust.Phone);
+        monitor.TrackExistingAccount(cust.CustNum, fields);
+    }
 }
 
 _ = app.Services.GetRequiredService<MonitorService>();

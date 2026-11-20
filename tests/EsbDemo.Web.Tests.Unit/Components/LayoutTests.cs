@@ -168,7 +168,7 @@ public sealed class LayoutTests : ComponentTestBase
 
         await cut.InvokeAsync(() => cut.Instance.Open("account.updated", "CRM"));
 
-        Assert.Contains("No customers created yet", cut.Find(".dialog-no-customers").TextContent, StringComparison.Ordinal);
+        Assert.Contains("No customers yet", cut.Find(".dialog-no-customers").TextContent, StringComparison.Ordinal);
         Assert.True(cut.Find(".btn-submit").HasAttribute("disabled"));
     }
 
@@ -200,5 +200,27 @@ public sealed class LayoutTests : ComponentTestBase
         Assert.Equal("CUST0099", sent!.Fields["CustomerId"]);
         Assert.Equal("New Co", sent.Fields["Name"]);
         Assert.Equal("n@new.co", sent.Fields["Email"]);
+    }
+
+
+
+    [Fact]
+    public async Task ActionDialog_when_a_customer_is_chosen_copies_only_the_fields_the_topic_defines()
+    {
+        Monitor.TrackExistingAccount("CUST0001", Fields(("CustomerId", "CUST0001"), ("Name", "Acme"), ("Email", "a@acme.com"), ("Phone", "555-1")));
+        ActionDialogResult? sent = null;
+        var cut = Render<ActionDialog>(p => p.Add(d => d.OnSubmit, r => sent = r));
+        await cut.InvokeAsync(() => cut.Instance.Open("order.place", "eCommerce"));
+
+        Assert.Equal("CUST0001 — Acme", cut.FindAll(".dialog-select option")[1].TextContent.Trim());
+        cut.Find(".dialog-select").Change("CUST0001");
+        cut.Find(".btn-submit").Click();
+
+        Assert.Equal
+        (
+            new[] { "Amount", "CustomerId", "OrderRef" },
+            sent!.Fields.Keys.Order(StringComparer.Ordinal)
+        );
+        Assert.Equal("CUST0001", sent.Fields["CustomerId"]);
     }
 }

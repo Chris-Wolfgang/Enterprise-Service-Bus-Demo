@@ -17,10 +17,10 @@
                         <label class="dialog-label">@field.Name</label>
                         @if (string.Equals(field.Type, "account", StringComparison.Ordinal))
                         {
-                            var accounts = Monitor.Accounts;
+                            var accounts = Monitor.KnownAccounts;
                             @if (accounts.Count == 0)
                             {
-                                <p class="dialog-no-customers">No customers created yet. Use Create Customer first.</p>
+                                <p class="dialog-no-customers">No customers yet. Use Create Customer first.</p>
                             }
                             else
                             {
@@ -123,16 +123,19 @@
 
         _fields[fieldName] = customerId;
 
-        var record = Monitor.Accounts.FirstOrDefault(
+        var record = Monitor.KnownAccounts.FirstOrDefault(
             a => string.Equals(a.CustomerId, customerId, StringComparison.OrdinalIgnoreCase)
         );
 
-        if (record is not null)
+        if (record is null)
+            return;
+
+        // Copy only the fields this topic defines; the dialog shows no input for any other field,
+        // so anything else would be sent without the user seeing it.
+        foreach (var field in _topicFields.Where(f => !string.Equals(f.Name, fieldName, StringComparison.Ordinal)))
         {
-            foreach (var kv in record.Fields.Where(kv => !string.Equals(kv.Key, fieldName, StringComparison.Ordinal)))
-            {
-                _fields[kv.Key] = kv.Value;
-            }
+            if (record.Fields.TryGetValue(field.Name, out var value))
+                _fields[field.Name] = value;
         }
     }
 

@@ -24,6 +24,25 @@ public sealed class ProgramTests
 
 
     [Fact]
+    public async Task Host_when_started_offers_the_seeded_customers_to_the_app_panel()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var known = factory.Services.GetRequiredService<EsbDemo.Web.Services.MonitorService>().KnownAccounts;
+
+        Assert.Equal
+        (
+            new[] { "CUST0001", "CUST0002", "CUST0003", "CUST0004", "CUST0005" },
+            known.Select(a => a.CustomerId)
+        );
+        Assert.Equal("Acme Corporation", known[0].Fields["Name"]);
+        Assert.Equal("contact@acme.com", known[0].Fields["Email"]);
+    }
+
+
+
+    [Fact]
     public async Task Host_when_the_route_is_unknown_renders_the_not_found_page()
     {
         await using var factory = new WebApplicationFactory<Program>();

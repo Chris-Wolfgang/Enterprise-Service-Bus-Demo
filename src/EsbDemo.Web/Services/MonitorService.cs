@@ -53,6 +53,10 @@ public sealed partial class MonitorService
     // Account tracking
     private readonly Dictionary<string, AccountRecord> _accountsByCorrelation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AccountRecord> _accountsById = new(StringComparer.OrdinalIgnoreCase);
+
+    // Customers that already exist in the systems' databases (the seeded ones). SetBus keeps them,
+    // because switching the bus does not reset the databases.
+    private readonly Dictionary<string, AccountRecord> _existingAccounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CancellationTokenSource> _pendingCreateCts = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -106,6 +110,49 @@ public sealed partial class MonitorService
         {
             lock (_gate)
                 return [.. _accountsByCorrelation.Values.Select(CopyOf)];
+        }
+    }
+
+
+    /// <summary>
+    /// Gets a snapshot of every customer the app panel can target: the accounts tracked through the
+    /// bus (including pending <c>account.create</c> requests and customers first seen in an
+    /// <c>account.updated</c>) and the customers registered with <see cref="TrackExistingAccount"/>.
+    /// </summary>
+    /// <remarks>
+    /// Each customer number appears once, with the most recent field values the bus has seen for it.
+    /// Customers with a number come first, ordered by number; pending requests follow.
+    /// The records are copies, so later bus activity does not change them.
+    /// </remarks>
+    public IReadOnlyList<AccountRecord> KnownAccounts
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var byNumber = new Dictionary<string, AccountRecord>(StringComparer.OrdinalIgnoreCase);
+                var pending = new List<AccountRecord>();
+
+                foreach (var record in _accountsByCorrelation.Values)
+                {
+                    if (record.CustomerId is null)
+                        pending.Add(CopyOf(record));
+                    else
+                        byNumber.TryAdd(record.CustomerId, CopyOf(record));
+                }
+
+                foreach (var (id, record) in _accountsById)
+                    byNumber.TryAdd(id, CopyOf(record));
+
+                foreach (var (id, record) in _existingAccounts)
+                    byNumber.TryAdd(id, CopyOf(record));
+
+                return
+                [
+                    .. byNumber.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase).Select(kv => kv.Value),
+                    .. pending
+                ];
+            }
         }
     }
 
@@ -236,6 +283,41 @@ public sealed partial class MonitorService
         }
 
         InvokeHandlers(handlerCalls);
+        NotifyChanged();
+    }
+
+
+    /// <summary>
+    /// Registers a customer that already exists in the systems' databases, such as a seeded one, so
+    /// <see cref="KnownAccounts"/> offers it before any message about it has crossed the bus.
+    /// </summary>
+    /// <remarks>
+    /// Registering the same customer number again replaces its fields. <see cref="SetBus"/> keeps
+    /// these registrations.
+    /// </remarks>
+    /// <param name="customerId">The shared customer number, such as <c>CUST0001</c>.</param>
+    /// <param name="fields">The customer's canonical fields (for example <c>Name</c>, <c>Email</c>, <c>Phone</c>).</param>
+    /// <exception cref="ArgumentException"><paramref name="customerId"/> is empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="customerId"/> or <paramref name="fields"/> is <see langword="null"/>.</exception>
+    public void TrackExistingAccount(string customerId, IReadOnlyDictionary<string, string> fields)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(customerId);
+        ArgumentNullException.ThrowIfNull(fields);
+
+        var record = new AccountRecord
+        {
+            CorrelationId = string.Empty,
+            SourceApp = string.Empty,
+            CustomerId = customerId,
+            Status = "Active"
+        };
+
+        foreach (var kv in fields)
+            record.Fields[kv.Key] = kv.Value;
+
+        lock (_gate)
+            _existingAccounts[customerId] = record;
+
         NotifyChanged();
     }
 
