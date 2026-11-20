@@ -23,4 +23,9 @@ internal sealed class QueuedMessage
 
 
     public DateTimeOffset Timestamp { get; init; }
+
+
+
+    // The account's fields before an account.updated, so the queued receive keeps the old-to-new diff.
+    public Dictionary<string, string>? OldAccountFields { get; init; }
 }
