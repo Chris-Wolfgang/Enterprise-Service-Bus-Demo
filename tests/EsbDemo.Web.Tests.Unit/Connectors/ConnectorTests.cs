@@ -89,14 +89,14 @@ public sealed class ConnectorTests
 
 
     [Fact]
-    public async Task CrmConnector_PublishAccountUpdated_when_optional_fields_are_missing_sends_the_account_id_and_blanks()
+    public async Task CrmConnector_PublishAccountUpdated_when_optional_fields_are_missing_sends_the_account_id_and_omits_them()
     {
         using var h = await ConnectorHarness.CreateAsync();
         var id = Guid.NewGuid();
 
         h.Crm.PublishAccountUpdated(new CrmAccount { AccountId = id, Name = "No Number" });
 
-        Assert.Equal($"CustomerId: {id}, Name: No Number, Email: , Phone: ", SentBy(h, "CRM").Summary);
+        Assert.Equal($"CustomerId: {id}, Name: No Number", SentBy(h, "CRM").Summary);
     }
 
 
@@ -129,7 +129,7 @@ public sealed class ConnectorTests
         var sent = h.Monitor.Entries.Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && e.Direction == MonitorDirection.Send).ToArray();
         Assert.Equal(new[] { "account.updated", "account.deactivated", "account.activated", "account.created" }, sent.Select(e => e.Topic));
         Assert.All(sent, e => Assert.Equal("CUST0001", e.CorrelationId));
-        Assert.Equal("CustomerId: CUST0001, Name: Acme, Email: , Phone: ", sent[0].Summary);
+        Assert.Equal("CustomerId: CUST0001, Name: Acme", sent[0].Summary);
     }
 
 
@@ -142,7 +142,7 @@ public sealed class ConnectorTests
         h.ECommerce.PublishAccountUpdated(new ECommerceCustomer { CustNum = "CUST0002", Name = "Globex" });
         h.Portal.PublishAccountUpdated(new PortalCustomer { CustNum = "CUST0003", Name = "Initech", Email = "i@initech.com", Phone = "555-3" });
 
-        Assert.Equal("CustomerId: CUST0002, Name: Globex, Email: , Phone: ", SentBy(h, "eCommerce").Summary);
+        Assert.Equal("CustomerId: CUST0002, Name: Globex", SentBy(h, "eCommerce").Summary);
         Assert.Equal("CustomerId: CUST0003, Name: Initech, Email: i@initech.com, Phone: 555-3", SentBy(h, "Customer Portal").Summary);
     }
 
@@ -178,6 +178,69 @@ public sealed class ConnectorTests
         Assert.Equal(("Acme Renamed", "new@acme.com", "555-9999"), (portal.Name, portal.Email, portal.Phone));
         var dw = h.Query<DataWarehouseDbContext, DwCustomer>(db => db.Customers.Single(c => c.CustNum == "CUST0001"));
         Assert.Equal(("Acme Renamed", "new@acme.com", "555-9999"), (dw.Name, dw.Email, dw.Phone));
+    }
+
+
+
+    [Fact]
+    public async Task Inbound_account_updated_when_Email_and_Phone_are_empty_keeps_every_systems_contact_details()
+    {
+        using var h = await ConnectorHarness.CreateAsync();
+        var changed = 0;
+        h.Crm.DataChanged += (_, _) => changed++;
+        h.Erp.DataChanged += (_, _) => changed++;
+        h.ECommerce.DataChanged += (_, _) => changed++;
+        h.Portal.DataChanged += (_, _) => changed++;
+        h.Warehouse.DataChanged += (_, _) => changed++;
+
+        h.Monitor.Publish
+        (
+            "account.updated",
+            "Tester",
+            "u-1",
+            Fields(("CustomerId", "CUST0001"), ("Name", "Acme Renamed"), ("Email", ""), ("Phone", ""))
+        );
+        await TestConfig.WaitUntilAsync(() => changed == 5);
+
+        var crm = h.Query<CrmDbContext, CrmAccount>(db => db.Accounts.Single(a => a.AccountNumber == "CUST0001"));
+        Assert.Equal(("Acme Renamed", "contact@acme.com", "555-1000"), (crm.Name, crm.EMailAddress1, crm.Telephone1));
+        var erp = h.Query<ErpDbContext, CustMast>(db => db.CustMast.Single(c => c.CustNum == "CUST0001"));
+        Assert.Equal(("Acme Renamed", "contact@acme.com", "555-1000"), (erp.Name, erp.Email, erp.Phone));
+        var shop = h.Query<ECommerceDbContext, ECommerceCustomer>(db => db.Customers.Single(c => c.CustNum == "CUST0001"));
+        Assert.Equal(("Acme Renamed", "contact@acme.com", "555-1000"), (shop.Name, shop.Email, shop.Phone));
+        var portal = h.Query<CustomerPortalDbContext, PortalCustomer>(db => db.Customers.Single(c => c.CustNum == "CUST0001"));
+        Assert.Equal(("Acme Renamed", "contact@acme.com", "555-1000"), (portal.Name, portal.Email, portal.Phone));
+        var dw = h.Query<DataWarehouseDbContext, DwCustomer>(db => db.Customers.Single(c => c.CustNum == "CUST0001"));
+        Assert.Equal(("Acme Renamed", "contact@acme.com", "555-1000"), (dw.Name, dw.Email, dw.Phone));
+    }
+
+
+
+    [Fact]
+    public async Task Inbound_account_created_when_Email_and_Phone_are_empty_stores_them_as_not_set()
+    {
+        using var h = await ConnectorHarness.CreateAsync();
+        var changed = 0;
+        h.Crm.DataChanged += (_, _) => changed++;
+        h.ECommerce.DataChanged += (_, _) => changed++;
+        h.Portal.DataChanged += (_, _) => changed++;
+        h.Warehouse.DataChanged += (_, _) => changed++;
+
+        h.Monitor.Publish("account.created", "Tester", "c-1", Fields(("CustomerId", "CUST0043"), ("Name", "Blank Co"), ("Email", ""), ("Phone", "")));
+        await TestConfig.WaitUntilAsync(() => changed == 4);
+
+        var crm = h.Query<CrmDbContext, CrmAccount>(db => db.Accounts.Single(a => a.AccountNumber == "CUST0043"));
+        Assert.Null(crm.EMailAddress1);
+        Assert.Null(crm.Telephone1);
+        var shop = h.Query<ECommerceDbContext, ECommerceCustomer>(db => db.Customers.Single(c => c.CustNum == "CUST0043"));
+        Assert.Null(shop.Email);
+        Assert.Null(shop.Phone);
+        var portal = h.Query<CustomerPortalDbContext, PortalCustomer>(db => db.Customers.Single(c => c.CustNum == "CUST0043"));
+        Assert.Null(portal.Email);
+        Assert.Null(portal.Phone);
+        var dw = h.Query<DataWarehouseDbContext, DwCustomer>(db => db.Customers.Single(c => c.CustNum == "CUST0043"));
+        Assert.Null(dw.Email);
+        Assert.Null(dw.Phone);
     }
 
 

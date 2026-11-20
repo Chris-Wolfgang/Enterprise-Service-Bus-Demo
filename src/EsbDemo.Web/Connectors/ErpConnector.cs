@@ -57,10 +57,10 @@ public sealed class ErpConnector
             {
                 // ERP CustNum is their customer identifier → ESB CustomerId
                 ["CustomerId"] = cust.CustNum,
-                ["Name"]       = cust.Name,
-                ["Email"]      = cust.Email ?? "",
-                ["Phone"]      = cust.Phone ?? ""
-            },
+                ["Name"]       = cust.Name
+            }
+            .AddIfSet("Email", cust.Email)
+            .AddIfSet("Phone", cust.Phone),
             isUserInitiated: true
         );
     }
@@ -107,10 +107,10 @@ public sealed class ErpConnector
             fields: new Dictionary<string, string>
             {
                 ["CustomerId"] = cust.CustNum,
-                ["Name"]       = cust.Name,
-                ["Email"]      = cust.Email ?? "",
-                ["Phone"]      = cust.Phone ?? ""
-            },
+                ["Name"]       = cust.Name
+            }
+            .AddIfSet("Email", cust.Email)
+            .AddIfSet("Phone", cust.Phone),
             isUserInitiated: true
         );
     }
@@ -144,8 +144,8 @@ public sealed class ErpConnector
         {
             // ESB canonical field names map directly to ERP field names here
             if (fields.TryGetValue("Name",  out var name))  cust.Name  = name;
-            if (fields.TryGetValue("Email", out var email)) cust.Email = email;
-            if (fields.TryGetValue("Phone", out var phone)) cust.Phone = phone;
+            if (fields.TryGetSet("Email", out var email)) cust.Email = email;
+            if (fields.TryGetSet("Phone", out var phone)) cust.Phone = phone;
             cust.ModDate = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
@@ -172,8 +172,8 @@ public sealed class ErpConnector
     private async Task CreateFromEsbAsync(ErpDbContext db, string customerId, Dictionary<string, string> fields)
     {
         fields.TryGetValue("Name",  out var name);
-        fields.TryGetValue("Email", out var email);
-        fields.TryGetValue("Phone", out var phone);
+        fields.TryGetSet("Email", out var email);
+        fields.TryGetSet("Phone", out var phone);
 
         var cust = new CustMast
         {
