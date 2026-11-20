@@ -132,6 +132,10 @@ pwsh ./scripts/build-pr.ps1
 pwsh ./scripts/format.ps1
 ```
 
+### CI Test Matrix
+
+Every pull request runs the tests on five legs: Linux x64 (`Stage 1`, which also gates coverage), Windows x64 (`Stage 2`, every TFM including .NET Framework), macOS ARM64 (`Stage 3`), and two ARM64 gates, `Stage 4: Linux ARM64 Tests` (`ubuntu-24.04-arm`) and `Stage 5: Windows ARM64 Tests` (`windows-11-arm`). The ARM64 and macOS legs run net6.0 and later; Stages 4 and 5 run in parallel with Stages 1-3, on public repositories only.
+
 ### Code Formatting
 
 This project uses `.editorconfig` and `dotnet format`:
