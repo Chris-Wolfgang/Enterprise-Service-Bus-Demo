@@ -102,14 +102,35 @@
         _activeTab = tab;
     }
 
-    private void OnMonitorChanged(object? sender, EventArgs e)
+    private void OnMonitorChanged(object? sender, EventArgs e) => _ = RefreshAsync();
+
+    // Observes the refresh instead of discarding it. MonitorService is a singleton, so this runs for
+    // every bus message on every circuit that still shows Home, including one whose browser has gone:
+    // JS interop there throws JSDisconnectedException (or is cancelled) until the circuit is evicted,
+    // which is expected and ignored. Anything else is logged.
+    private async Task RefreshAsync()
     {
-        InvokeAsync(async () =>
+        try
         {
-            StateHasChanged();
-            if (_activeTab == "monitor")
-                await Js.InvokeVoidAsync("scrollMonitorToBottom", "monitor-container");
-        });
+            await InvokeAsync(async () =>
+            {
+                StateHasChanged();
+                if (_activeTab == "monitor")
+                    await Js.InvokeVoidAsync("scrollMonitorToBottom", "monitor-container");
+            });
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; it is disposed after its retention period.
+        }
+        catch (OperationCanceledException)
+        {
+            // The circuit is shutting down.
+        }
+        catch (Exception ex)
+        {
+            LogRefreshFault(Logger, ex);
+        }
     }
 
     /// <summary>

@@ -1,5 +1,7 @@
 using Bunit;
 using EsbDemo.Web.Components.Pages;
+using Microsoft.Extensions.Logging;
+using Microsoft.JSInterop;
 
 namespace EsbDemo.Web.Tests.Unit.Components;
 
@@ -84,5 +86,50 @@ public sealed class HomeTests : ComponentTestBase
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("tbody tr")));
         Assert.Equal("u-1", cut.FindAll(".col-corr")[0].TextContent);
         Assert.Empty(JSInterop.Invocations["scrollMonitorToBottom"]);
+    }
+
+
+    [Fact]
+    public void Home_when_the_circuit_has_disconnected_ignores_the_failed_scroll()
+    {
+        JSInterop.SetupVoid("scrollMonitorToBottom", "monitor-container").SetException(new JSDisconnectedException("circuit gone"));
+        var cut = Render<Home>();
+
+        Monitor.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0001")));
+        Monitor.Publish("account.updated", "CRM", "u-2", Fields(("CustomerId", "CUST0001")));
+
+        cut.WaitForAssertion(() => Assert.Equal(2, JSInterop.Invocations["scrollMonitorToBottom"].Count));
+        Assert.NotEmpty(cut.FindAll("tbody tr"));
+        Assert.Equal(0, HomeLogger.Collector.Count);
+    }
+
+
+
+    [Fact]
+    public void Home_when_the_scroll_is_cancelled_ignores_it()
+    {
+        JSInterop.SetupVoid("scrollMonitorToBottom", "monitor-container").SetCanceled();
+        var cut = Render<Home>();
+
+        Monitor.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0001")));
+
+        cut.WaitForAssertion(() => Assert.Single(JSInterop.Invocations["scrollMonitorToBottom"]));
+        Assert.Equal(0, HomeLogger.Collector.Count);
+    }
+
+
+
+    [Fact]
+    public void Home_when_the_scroll_fails_otherwise_logs_the_fault()
+    {
+        JSInterop.SetupVoid("scrollMonitorToBottom", "monitor-container").SetException(new InvalidOperationException("script missing"));
+        var cut = Render<Home>();
+
+        Monitor.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0001")));
+
+        cut.WaitForAssertion(() => Assert.Equal(1, HomeLogger.Collector.Count));
+        var record = HomeLogger.Collector.LatestRecord;
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.Equal("script missing", record.Exception?.Message);
     }
 }
