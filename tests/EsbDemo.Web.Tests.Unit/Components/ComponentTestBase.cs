@@ -7,9 +7,12 @@ using EsbDemo.Web.Data.DataWarehouse;
 using EsbDemo.Web.Data.ECommerce;
 using EsbDemo.Web.Data.Erp;
 using EsbDemo.Web.Models;
+using EsbDemo.Web.Components.Pages;
 using EsbDemo.Web.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EsbDemo.Web.Tests.Unit.Components;
@@ -32,6 +35,11 @@ public abstract class ComponentTestBase : BunitContext, IAsyncLifetime
 
 
 
+    /// <summary>Receives what <see cref="Home"/> logs.</summary>
+    protected FakeLogger<Home> HomeLogger { get; } = new();
+
+
+
     public async Task InitializeAsync()
     {
         Config = await ShippedConfig.LoadAsync();
@@ -41,6 +49,7 @@ public abstract class ComponentTestBase : BunitContext, IAsyncLifetime
         Services.AddSingleton<TimeProvider>(Time);
         Services.AddSingleton(Config);
         Services.AddSingleton(Monitor);
+        Services.AddSingleton<ILogger<Home>>(HomeLogger);
         Services.AddDbContextFactory<CrmDbContext>(o => o.UseInMemoryDatabase("CRM-" + suffix));
         Services.AddDbContextFactory<ErpDbContext>(o => o.UseInMemoryDatabase("ERP-" + suffix));
         Services.AddDbContextFactory<ECommerceDbContext>(o => o.UseInMemoryDatabase("ECommerce-" + suffix));
