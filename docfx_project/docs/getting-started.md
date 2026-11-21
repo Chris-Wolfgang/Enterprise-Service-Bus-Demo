@@ -18,7 +18,7 @@ Open the URL printed in the console (by default `http://localhost:5281`).
 
 ## Try it
 
-1. Open the **CRM** tab and create a customer. The CRM publishes `account.create`; the ERP answers with `account.created`, and the other systems add the customer.
+1. In the app panel on the left, click **Create Customer** under **CRM** and submit the dialog. The CRM publishes `account.create`; the ERP answers with `account.created`, and the other systems add the customer. (The system tabs edit, deactivate and re-activate existing customers; the only tab that creates one is the **ERP** tab's **[F4] New Customer**, which publishes `account.created` directly.)
 2. Take a system **offline** in the app panel, make another change, and watch the message queue for it. Bring it back online and the queued messages are delivered in order.
 3. Watch the **message monitor** on the home page: every send and receive is logged with its correlation ID.
 
