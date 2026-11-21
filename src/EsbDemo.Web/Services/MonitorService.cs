@@ -412,7 +412,7 @@ public sealed partial class MonitorService
             {
                 DeliverToSubscriber(
                     app, topic, sourceApp, correlationId, fields,
-                    summary, cssClass, now, isUserInitiated, handlerCalls, oldAccountFields
+                    summary, now, isUserInitiated, handlerCalls, oldAccountFields
                 );
             }
         }
@@ -586,39 +586,18 @@ public sealed partial class MonitorService
         string? correlationId,
         Dictionary<string, string> fields,
         string sendSummary,
-        string cssClass,
         DateTimeOffset now,
         bool isUserInitiated,
         List<HandlerCall> handlerCalls,
         Dictionary<string, string>? oldAccountFields = null
     )
     {
-        var isSelfOrigin = string.Equals(app.Name, sourceApp, StringComparison.OrdinalIgnoreCase);
-
-        var recvEntry = new MonitorEntry
-        {
-            Timestamp = now,
-            AppName = app.Name,
-            Direction = MonitorDirection.Receive,
-            Topic = topic,
-            CorrelationId = correlationId,
-            Summary = isSelfOrigin
-                ? "Self-originated — no action taken"
-                : BuildReceiverSummary(app.Name, topic, fields, oldAccountFields) ?? sendSummary,
-            CssClass = isSelfOrigin ? "topic-self" : cssClass
-        };
-
         if (IsOnlineCore(app.Name))
         {
-            AddEntry(recvEntry);
-
-            if (!isSelfOrigin)
-            {
-                TriggerAutoResponse(app, topic, correlationId, fields, isUserInitiated, sourceApp);
-
-                if (_handlers.TryGetValue(app.Name, out var handler))
-                    handlerCalls.Add(new HandlerCall(app.Name, handler, topic, new Dictionary<string, string>(fields)));
-            }
+            Receive(
+                app, app.Name, topic, sourceApp, correlationId, fields, sendSummary,
+                now, isUserInitiated, oldAccountFields, isQueued: false, handlerCalls
+            );
         }
         else
         {
@@ -632,7 +611,8 @@ public sealed partial class MonitorService
                 CorrelationId = correlationId,
                 Fields = new Dictionary<string, string>(fields),
                 IsUserInitiated = isUserInitiated,
-                Timestamp = now
+                Timestamp = now,
+                OldAccountFields = oldAccountFields is null ? null : new Dictionary<string, string>(oldAccountFields)
             });
         }
     }
@@ -640,31 +620,58 @@ public sealed partial class MonitorService
 
     private void FlushQueuedMessage(AppConfig? app, string appName, QueuedMessage msg, List<HandlerCall> handlerCalls)
     {
-        var cssClass = _config.GetTopicCssClass(msg.Topic);
-        var summary = BuildReceiverSummary(appName, msg.Topic, msg.Fields) ?? BuildSummary(msg.Fields);
+        Receive(
+            app, appName, msg.Topic, msg.SourceApp, msg.CorrelationId, msg.Fields, sendSummary: null,
+            msg.Timestamp, msg.IsUserInitiated, msg.OldAccountFields, isQueued: true, handlerCalls
+        );
+    }
+
+
+    // Caller holds _gate. The one place that logs a delivery and decides its side effects, so a
+    // message delivered from an offline system's queue reads and acts exactly as a live one: the
+    // sender's own copy is marked self-originated and fires nothing, an account.updated keeps its
+    // old-to-new diff, and only other systems' copies trigger auto-responses and connector handlers.
+    private void Receive(
+        AppConfig? app,
+        string appName,
+        string topic,
+        string sourceApp,
+        string? correlationId,
+        Dictionary<string, string> fields,
+        string? sendSummary,
+        DateTimeOffset timestamp,
+        bool isUserInitiated,
+        Dictionary<string, string>? oldAccountFields,
+        bool isQueued,
+        List<HandlerCall> handlerCalls
+    )
+    {
+        var isSelfOrigin = string.Equals(appName, sourceApp, StringComparison.OrdinalIgnoreCase);
 
         AddEntry(
             new MonitorEntry
             {
-                Timestamp = msg.Timestamp,
+                Timestamp = timestamp,
                 AppName = appName,
                 Direction = MonitorDirection.Receive,
-                Topic = msg.Topic,
-                CorrelationId = msg.CorrelationId,
-                Summary = summary,
-                CssClass = cssClass,
-                IsQueued = true
+                Topic = topic,
+                CorrelationId = correlationId,
+                Summary = isSelfOrigin
+                    ? "Self-originated — no action taken"
+                    : BuildReceiverSummary(appName, topic, fields, oldAccountFields) ?? sendSummary ?? BuildSummary(fields),
+                CssClass = isSelfOrigin ? "topic-self" : _config.GetTopicCssClass(topic),
+                IsQueued = isQueued
             }
         );
 
-        if (app is not null)
-            TriggerAutoResponse(app, msg.Topic, msg.CorrelationId, msg.Fields, msg.IsUserInitiated, msg.SourceApp);
+        if (isSelfOrigin)
+            return;
 
-        if (!string.Equals(appName, msg.SourceApp, StringComparison.OrdinalIgnoreCase) &&
-            _handlers.TryGetValue(appName, out var handler))
-        {
-            handlerCalls.Add(new HandlerCall(appName, handler, msg.Topic, new Dictionary<string, string>(msg.Fields)));
-        }
+        if (app is not null)
+            TriggerAutoResponse(app, topic, correlationId, fields, isUserInitiated);
+
+        if (_handlers.TryGetValue(appName, out var handler))
+            handlerCalls.Add(new HandlerCall(appName, handler, topic, new Dictionary<string, string>(fields)));
     }
 
 
@@ -673,8 +680,7 @@ public sealed partial class MonitorService
         string topic,
         string? correlationId,
         Dictionary<string, string> fields,
-        bool isUserInitiated,
-        string originalSourceApp
+        bool isUserInitiated
     )
     {
         if (!isUserInitiated) return;
@@ -688,7 +694,7 @@ public sealed partial class MonitorService
         {
             Observe
             (
-                () => PublishAutoResponseAsync(autoResponse.Publish, app.Name, correlationId, fields, originalSourceApp),
+                () => PublishAutoResponseAsync(autoResponse.Publish, app.Name, correlationId, fields),
                 $"{app.Name} auto-response {autoResponse.Publish}"
             );
         }
@@ -740,8 +746,7 @@ public sealed partial class MonitorService
         string responseTopic,
         string respondingApp,
         string? correlationId,
-        Dictionary<string, string> originalFields,
-        string originalSourceApp
+        Dictionary<string, string> originalFields
     )
     {
         await Task.Delay(AutoResponseDelay, _timeProvider, CancellationToken.None).ConfigureAwait(false);
@@ -756,10 +761,6 @@ public sealed partial class MonitorService
                 merged[kv.Key] = kv.Value;
         }
 
-        var responseCorrelationId = BuildResponseCorrelationId(
-            responseTopic, respondingApp, originalSourceApp, correlationId, merged
-        );
-
         // Let the responding system store what it is about to announce (the ERP saves the customer
         // it minted) before any other system receives the reply.
         Func<string, Dictionary<string, string>, Task>? responderHandler;
@@ -769,31 +770,10 @@ public sealed partial class MonitorService
         if (responderHandler is not null)
             await responderHandler(responseTopic, new Dictionary<string, string>(merged)).ConfigureAwait(false);
 
-        Publish(responseTopic, respondingApp, responseCorrelationId, merged, isUserInitiated: false);
-    }
-
-
-    private static string? BuildResponseCorrelationId(
-        string responseTopic,
-        string respondingApp,
-        string originalSourceApp,
-        string? originalCorrelationId,
-        Dictionary<string, string> mergedFields
-    )
-    {
-        if (!string.Equals(responseTopic, "account.created", StringComparison.Ordinal))
-            return originalCorrelationId;
-
-        // ERP originated the account — use the minted account number
-        if (string.Equals(originalSourceApp, respondingApp, StringComparison.OrdinalIgnoreCase) &&
-            mergedFields.TryGetValue("CustomerId", out var custId) &&
-            !string.IsNullOrEmpty(custId))
-        {
-            return custId;
-        }
-
-        // Another app originated it — pass through their correlation ID unchanged
-        return originalCorrelationId;
+        // A reply carries the request's correlation ID. An app never answers its own request (a
+        // self-originated copy fires no auto-response), so the reply always links back to another
+        // app's request.
+        Publish(responseTopic, respondingApp, correlationId, merged, isUserInitiated: false);
     }
 
 

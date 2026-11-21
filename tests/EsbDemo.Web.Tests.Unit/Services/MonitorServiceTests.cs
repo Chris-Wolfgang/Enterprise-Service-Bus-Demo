@@ -366,7 +366,7 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
-    public async Task Publish_when_the_ERP_replies_to_its_own_request_uses_the_minted_id_as_correlation_id()
+    public async Task Publish_when_the_ERP_queues_its_own_request_does_not_reply_to_itself()
     {
         var (sut, time) = await CreateAsync();
         sut.SetOnline("ERP", online: false);
@@ -374,11 +374,16 @@ public sealed class MonitorServiceTests
 
         sut.SetOnline("ERP", online: true);
         time.Advance(MonitorService.AutoResponseDelay);
+        sut.Publish("account.create", "CRM", "crm-corr", Fields(("Name", "Other")), isUserInitiated: true);
+        time.Advance(MonitorService.AutoResponseDelay);
         await TestConfig.WaitUntilAsync(() => Sent(sut, "account.created").Length == 1);
 
-        var reply = Sent(sut, "account.created")[0];
-        Assert.Matches(CustomerIdPattern, reply.CorrelationId);
-        Assert.Contains("CustomerId: " + reply.CorrelationId, reply.Summary, StringComparison.Ordinal);
+        Assert.Equal("crm-corr", Assert.Single(Sent(sut, "account.created")).CorrelationId);
+        Assert.Equal
+        (
+            "Self-originated — no action taken",
+            Assert.Single(sut.Entries, e => string.Equals(e.CorrelationId, "erp-corr", StringComparison.Ordinal) && e.IsQueued).Summary
+        );
     }
 
 
@@ -480,6 +485,81 @@ public sealed class MonitorServiceTests
         (
             "Inserted new record — Account CUST0099: New Co",
             Received(sut, "account.created", "Data Warehouse")!.Summary
+        );
+    }
+
+
+
+    [Fact]
+    public async Task SetOnline_when_a_queued_message_is_the_apps_own_logs_it_as_self_originated_and_does_not_handle_it()
+    {
+        var (sut, _) = await CreateAsync();
+        var crmCalls = 0;
+        sut.RegisterHandler("CRM", (_, _) => { crmCalls++; return Task.CompletedTask; });
+        sut.SetOnline("CRM", online: false);
+
+        sut.Publish("account.deactivated", "CRM", "c-1", Fields(("CustomerId", "CUST0001"), ("Name", "Acme")));
+        sut.SetOnline("CRM", online: true);
+
+        var self = Received(sut, "account.deactivated", "CRM")!;
+        Assert.Equal(("Self-originated — no action taken", "topic-self", true), (self.Summary, self.CssClass, self.IsQueued));
+        Assert.Equal(0, crmCalls);
+    }
+
+
+
+    [Fact]
+    public async Task SetOnline_when_a_queued_message_is_the_apps_own_does_not_fire_its_auto_response()
+    {
+        var config = await TestConfig.LoadAsync
+        (
+            """
+            [
+              { "name": "Echo", "publishes": [ "ping" ], "subscribes": [ "ping" ], "autoResponses": [ { "on": "ping", "publish": "pong" } ] },
+              { "name": "Listener", "subscribes": [ "ping", "pong" ] }
+            ]
+            """,
+            "[]"
+        );
+        var time = new FakeTimeProvider();
+        var sut = new MonitorService(config, time);
+        sut.SetOnline("Echo", online: false);
+
+        sut.Publish("ping", "Echo", "p-1", Fields(("A", "1")), isUserInitiated: true);
+        sut.SetOnline("Echo", online: true);
+        time.Advance(MonitorService.AutoResponseDelay);
+        sut.Publish("ping", "Tester", "p-2", Fields(("A", "2")), isUserInitiated: true);
+        time.Advance(MonitorService.AutoResponseDelay);
+        await TestConfig.WaitUntilAsync(() => Sent(sut, "pong").Length == 1);
+
+        Assert.Equal("p-2", Assert.Single(Sent(sut, "pong")).CorrelationId);
+    }
+
+
+
+    [Fact]
+    public async Task SetOnline_when_a_queued_account_updated_is_delivered_shows_the_old_to_new_diff()
+    {
+        var (sut, _) = await CreateAsync();
+        sut.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0001"), ("Email", "old@acme.com")));
+        sut.SetOnline("ERP", online: false);
+
+        sut.Publish("account.updated", "CRM", "u-2", Fields(("CustomerId", "CUST0001"), ("Email", "new@acme.com")));
+        sut.Publish("account.updated", "CRM", "u-3", Fields(("CustomerId", "CUST0001"), ("Email", "newer@acme.com")));
+        sut.SetOnline("ERP", online: true);
+
+        var queued = sut.Entries
+            .Where(e => string.Equals(e.AppName, "ERP", StringComparison.Ordinal) && e.IsQueued)
+            .Select(e => e.Summary)
+            .ToArray();
+        Assert.Equal
+        (
+            new[]
+            {
+                "Email: \"old@acme.com\" → \"new@acme.com\"",
+                "Email: \"new@acme.com\" → \"newer@acme.com\""
+            },
+            queued
         );
     }
 
