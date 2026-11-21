@@ -1,5 +1,6 @@
 @inject IDbContextFactory<ECommerceDbContext> DbFactory
 @inject ECommerceConnector Connector
+@inject MonitorService Monitor
 @implements IDisposable
 
 <div class="app-tab ecommerce-tab">
@@ -7,6 +8,10 @@
         <h2>eCommerce — Customers</h2>
         <span class="app-tag ecomm-tag">Shopify/WooCommerce style</span>
     </div>
+    @if (IsOffline)
+    {
+        <div class="tab-offline-banner">eCommerce is offline: changes cannot be saved or published until it is back online.</div>
+    }
 
     <table class="data-grid">
         <thead>
@@ -53,7 +58,7 @@
                     <tr class="edit-row">
                         <td colspan="6">
                             <div class="edit-actions">
-                                <button class="btn-save" @onclick="SaveEdit">Save &amp; Publish</button>
+                                <button class="btn-save" disabled="@IsOffline" @onclick="SaveEdit">Save &amp; Publish</button>
                                 <button class="btn-cancel" @onclick="CancelEdit">Cancel</button>
                                 <span class="edit-hint">Saving will publish an <code>account.updated</code> message to the ESB</span>
                             </div>
@@ -71,20 +76,29 @@
     private string _editName = "";
     private string _editEmail = "";
 
+    private AppOnlineWatch? _online;
+
+    private bool IsOffline => _online?.IsOffline == true;
+
     /// <summary>
     /// Loads the store's customers and subscribes to <see cref="ECommerceConnector.DataChanged"/> so the list reloads
     /// when a bus message changes the data.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        _online = new AppOnlineWatch(Monitor, "eCommerce", () => InvokeAsync(StateHasChanged));
         _customers = await LoadAsync();
         Connector.DataChanged += OnDataChanged;
     }
 
     /// <summary>
-    /// Unsubscribes from <see cref="ECommerceConnector.DataChanged"/>.
+    /// Unsubscribes from <see cref="ECommerceConnector.DataChanged"/> and stops watching the system's online state.
     /// </summary>
-    public void Dispose() => Connector.DataChanged -= OnDataChanged;
+    public void Dispose()
+    {
+        Connector.DataChanged -= OnDataChanged;
+        _online?.Dispose();
+    }
 
     private void OnDataChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(async () =>
@@ -105,6 +119,7 @@
 
     private async Task SaveEdit()
     {
+        if (IsOffline) return;
         var cust = _customers.FirstOrDefault(c => c.CustNum == _editId);
         if (cust is null) return;
         cust.Name = _editName;
