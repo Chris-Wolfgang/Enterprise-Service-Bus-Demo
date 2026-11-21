@@ -1,6 +1,8 @@
 using Bunit;
 using EsbDemo.Web.Components.Layout;
 using EsbDemo.Web.Components.Shared;
+using EsbDemo.Web.Data.Crm;
+using EsbDemo.Web.Data.Erp;
 using EsbDemo.Web.Models;
 
 namespace EsbDemo.Web.Tests.Unit.Components;
@@ -103,6 +105,29 @@ public sealed class LayoutTests : ComponentTestBase
         ByText(cut, ".btn-action", "Order Shipped").Click();
         cut.Find(".btn-submit").Click();
         Assert.True(Guid.TryParse(Assert.Single(SentBy("WMS")).CorrelationId, out _));
+    }
+
+
+
+    [Fact]
+    public async Task AppPanel_when_a_dialog_is_sent_applies_the_message_to_the_sending_systems_own_database()
+    {
+        var cut = Render<AppPanel>();
+
+        ByText(cut, ".btn-action", "Customer Created").Click();
+        cut.FindAll(".dialog-input")[0].Input("CUST4321");
+        cut.FindAll(".dialog-input")[1].Input("Panel Co");
+        cut.Find(".btn-submit").Click();
+        await TestConfig.WaitUntilAsync(() => Query<ErpDbContext, bool>(db => db.CustMast.Any(c => c.CustNum == "CUST4321")));
+
+        Monitor.TrackExistingAccount("CUST0001", Fields(("CustomerId", "CUST0001"), ("Name", "Acme Corporation")));
+        cut.FindAll(".app-card")[0].QuerySelectorAll(".btn-action")[1].Click();
+        cut.Find(".dialog-select").Change("CUST0001");
+        cut.FindAll(".dialog-input")[1].Input("Acme From Panel");
+        cut.Find(".btn-submit").Click();
+        await TestConfig.WaitUntilAsync(() => string.Equals(Query<CrmDbContext, string>(db => db.Accounts.Single(a => a.AccountNumber == "CUST0001").Name), "Acme From Panel", StringComparison.Ordinal));
+
+        Assert.Equal("Panel Co", Query<ErpDbContext, string>(db => db.CustMast.Single(c => c.CustNum == "CUST4321").Name));
     }
 
 

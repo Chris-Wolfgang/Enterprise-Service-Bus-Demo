@@ -422,6 +422,53 @@ public sealed partial class MonitorService
     }
 
 
+    /// <summary>
+    /// Applies a message to <paramref name="sourceApp"/>'s own data through its connector, then
+    /// publishes it. Use it for a message composed for a system outside that system's own UI (the
+    /// app panel), so the sender ends up with the data it announces, as every subscriber does.
+    /// </summary>
+    /// <remarks>
+    /// This mirrors how an auto-response is stored by the responding system before it is published:
+    /// for example, a <c>Customer Created</c> sent from the ERP panel adds the customer to the ERP
+    /// customer master. A fault in the source's handler is logged, and the message is still published.
+    /// The tabs do not need this: they write their own database and then publish.
+    /// </remarks>
+    /// <param name="topic">The topic to publish.</param>
+    /// <param name="sourceApp">The name of the publishing app.</param>
+    /// <param name="correlationId">The correlation ID that links a request to its replies, or <see langword="null"/>.</param>
+    /// <param name="fields">The payload, keyed by field name. The source and each subscriber receive their own copy.</param>
+    /// <param name="isUserInitiated">
+    /// <see langword="true"/> when a person triggered the message; see <see cref="Publish"/>.
+    /// </param>
+    /// <returns>A task that completes once the message is applied to the source and published.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="fields"/> is <see langword="null"/>.</exception>
+    public async Task PublishAndApplyAsync(
+        string topic,
+        string sourceApp,
+        string? correlationId,
+        Dictionary<string, string> fields,
+        bool isUserInitiated = false
+    )
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+
+        Func<string, Dictionary<string, string>, Task>? sourceHandler;
+        lock (_gate)
+            _handlers.TryGetValue(sourceApp, out sourceHandler);
+
+        if (sourceHandler is not null)
+        {
+            await ObserveAsync
+            (
+                () => sourceHandler(topic, new Dictionary<string, string>(fields)),
+                $"{sourceApp} handler for its own {topic}"
+            ).ConfigureAwait(false);
+        }
+
+        Publish(topic, sourceApp, correlationId, fields, isUserInitiated);
+    }
+
+
     private void TrackAccountCreate(string topic, string sourceApp, string? correlationId, Dictionary<string, string> fields)
     {
         if (!string.Equals(topic, "account.create", StringComparison.Ordinal) ||

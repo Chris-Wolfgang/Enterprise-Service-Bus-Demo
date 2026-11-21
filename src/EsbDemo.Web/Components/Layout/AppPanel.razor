@@ -55,10 +55,13 @@
         _dialog?.Open(topic, sourceApp);
     }
 
-    private void HandleDialogSubmit(ActionDialogResult result)
+    private async Task HandleDialogSubmit(ActionDialogResult result)
     {
         var correlationId = GenerateCorrelationId(result.SourceApp, result.Topic, result.Fields);
-        Monitor.Publish(result.Topic, result.SourceApp, correlationId, result.Fields, isUserInitiated: true);
+
+        // Apply the message to the sending system's own database too: the panel bypasses that
+        // system's tab, which would otherwise have written it before publishing.
+        await Monitor.PublishAndApplyAsync(result.Topic, result.SourceApp, correlationId, result.Fields, isUserInitiated: true);
     }
 
 

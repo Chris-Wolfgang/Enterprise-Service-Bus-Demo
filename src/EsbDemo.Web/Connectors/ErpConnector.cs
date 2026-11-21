@@ -133,7 +133,8 @@ public sealed class ErpConnector
 
         if (cust is null)
         {
-            // Only reached from the ERP's own account.created auto-response: store the minted customer.
+            // Only reached for the ERP's own account.created (its auto-response, or a Customer Created
+            // sent from the ERP app panel): store the customer it announces.
             if (string.Equals(topic, "account.created", StringComparison.Ordinal))
                 await CreateFromEsbAsync(db, customerId, fields).ConfigureAwait(false);
 
