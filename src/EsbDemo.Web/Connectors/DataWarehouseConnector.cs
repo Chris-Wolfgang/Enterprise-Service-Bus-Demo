@@ -60,8 +60,8 @@ public sealed class DataWarehouseConnector
         {
             if (row is null) return;
             if (fields.TryGetValue("Name",  out var name))  row.Name  = name;
-            if (fields.TryGetValue("Email", out var email)) row.Email = email;
-            if (fields.TryGetValue("Phone", out var phone)) row.Phone = phone;
+            if (fields.TryGetSet("Email", out var email)) row.Email = email;
+            if (fields.TryGetSet("Phone", out var phone)) row.Phone = phone;
             row.LastUpdated = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
@@ -89,8 +89,8 @@ public sealed class DataWarehouseConnector
     private async Task AddCustomerAsync(DataWarehouseDbContext db, string custNum, Dictionary<string, string> fields)
     {
         fields.TryGetValue("Name",  out var name);
-        fields.TryGetValue("Email", out var email);
-        fields.TryGetValue("Phone", out var phone);
+        fields.TryGetSet("Email", out var email);
+        fields.TryGetSet("Phone", out var phone);
 
         var row = new DwCustomer
         {

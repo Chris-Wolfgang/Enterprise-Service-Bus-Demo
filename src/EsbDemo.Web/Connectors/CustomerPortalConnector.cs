@@ -55,10 +55,10 @@ public sealed class CustomerPortalConnector
             fields: new Dictionary<string, string>
             {
                 ["CustomerId"] = cust.CustNum,
-                ["Name"]       = cust.Name,
-                ["Email"]      = cust.Email ?? "",
-                ["Phone"]      = cust.Phone ?? ""
-            },
+                ["Name"]       = cust.Name
+            }
+            .AddIfSet("Email", cust.Email)
+            .AddIfSet("Phone", cust.Phone),
             isUserInitiated: true
         );
     }
@@ -83,8 +83,8 @@ public sealed class CustomerPortalConnector
             if (string.Equals(topic, "account.created", StringComparison.Ordinal))
             {
                 fields.TryGetValue("Name",  out var name);
-                fields.TryGetValue("Email", out var email);
-                fields.TryGetValue("Phone", out var phone);
+                fields.TryGetSet("Email", out var email);
+                fields.TryGetSet("Phone", out var phone);
 
                 await db.Customers.AddAsync(new PortalCustomer
                 {
@@ -104,8 +104,8 @@ public sealed class CustomerPortalConnector
         if (string.Equals(topic, "account.updated", StringComparison.Ordinal))
         {
             if (fields.TryGetValue("Name",  out var name))  cust.Name  = name;
-            if (fields.TryGetValue("Email", out var email)) cust.Email = email;
-            if (fields.TryGetValue("Phone", out var phone)) cust.Phone = phone;
+            if (fields.TryGetSet("Email", out var email)) cust.Email = email;
+            if (fields.TryGetSet("Phone", out var phone)) cust.Phone = phone;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
         }

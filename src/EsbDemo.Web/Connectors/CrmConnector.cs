@@ -56,10 +56,10 @@ public sealed class CrmConnector
             {
                 // CRM internal name   →   ESB canonical name
                 ["CustomerId"] = acct.AccountNumber ?? acct.AccountId.ToString(),
-                ["Name"]       = acct.Name,
-                ["Email"]      = acct.EMailAddress1 ?? "",   // EMailAddress1 → Email
-                ["Phone"]      = acct.Telephone1    ?? ""    // Telephone1    → Phone
-            },
+                ["Name"]       = acct.Name
+            }
+            .AddIfSet("Email", acct.EMailAddress1)
+            .AddIfSet("Phone", acct.Telephone1),
             isUserInitiated: true
         );
     }
@@ -114,8 +114,8 @@ public sealed class CrmConnector
         {
             // ESB Email → CRM EMailAddress1; ESB Phone → CRM Telephone1
             if (fields.TryGetValue("Name",  out var name))  acct.Name           = name;
-            if (fields.TryGetValue("Email", out var email)) acct.EMailAddress1  = email;
-            if (fields.TryGetValue("Phone", out var phone)) acct.Telephone1     = phone;
+            if (fields.TryGetSet("Email", out var email)) acct.EMailAddress1  = email;
+            if (fields.TryGetSet("Phone", out var phone)) acct.Telephone1     = phone;
             acct.ModifiedOn = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync().ConfigureAwait(false);
             DataChanged?.Invoke(this, EventArgs.Empty);
@@ -149,8 +149,8 @@ public sealed class CrmConnector
         }
 
         fields.TryGetValue("Name",  out var newName);
-        fields.TryGetValue("Email", out var newEmail);
-        fields.TryGetValue("Phone", out var newPhone);
+        fields.TryGetSet("Email", out var newEmail);
+        fields.TryGetSet("Phone", out var newPhone);
 
         var newAcct = new CrmAccount
         {
