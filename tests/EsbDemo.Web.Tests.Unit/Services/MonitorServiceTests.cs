@@ -574,6 +574,64 @@ public sealed class MonitorServiceTests
 
 
     [Fact]
+    public async Task KnownAccounts_when_accounts_come_from_every_source_lists_each_customer_once_ordered_with_pending_last()
+    {
+        var (sut, _) = await CreateAsync();
+        sut.TrackExistingAccount("CUST0002", Fields(("CustomerId", "CUST0002"), ("Name", "Seeded Globex")));
+        sut.TrackExistingAccount("CUST0001", Fields(("CustomerId", "CUST0001"), ("Name", "Seeded Acme")));
+        sut.Publish("account.updated", "CRM", "u-1", Fields(("CustomerId", "CUST0002"), ("Name", "Updated Globex")));
+        sut.Publish("account.updated", "CRM", "u-2", Fields(("CustomerId", "CUST0077"), ("Name", "Only Updated")));
+        sut.Publish("account.created", "ERP", "CUST0099", Fields(("CustomerId", "CUST0099"), ("Name", "New Co")));
+        sut.Publish("account.create", "CRM", "corr-p", Fields(("Name", "Waiting Co")));
+
+        var known = sut.KnownAccounts;
+
+        Assert.Equal
+        (
+            new[] { "CUST0001", "CUST0002", "CUST0077", "CUST0099", null },
+            known.Select(a => a.CustomerId)
+        );
+        Assert.Equal
+        (
+            new[] { "Seeded Acme", "Updated Globex", "Only Updated", "New Co", "Waiting Co" },
+            known.Select(a => a.Fields["Name"])
+        );
+    }
+
+
+
+    [Fact]
+    public async Task TrackExistingAccount_when_registered_again_replaces_the_fields_and_survives_SetBus()
+    {
+        var (sut, _) = await CreateAsync();
+        var raised = 0;
+        sut.OnChanged += (_, _) => raised++;
+
+        sut.TrackExistingAccount("CUST0001", Fields(("Name", "First")));
+        sut.TrackExistingAccount("CUST0001", Fields(("Name", "Second")));
+        sut.SetBus("Kafka");
+
+        var account = Assert.Single(sut.KnownAccounts);
+        Assert.Equal(("CUST0001", "Active", "Second"), (account.CustomerId, account.Status, account.Fields["Name"]));
+        Assert.Empty(sut.Accounts);
+        Assert.Equal(3, raised);
+    }
+
+
+
+    [Fact]
+    public async Task TrackExistingAccount_when_an_argument_is_missing_throws()
+    {
+        var (sut, _) = await CreateAsync();
+
+        Assert.Throws<ArgumentNullException>(() => sut.TrackExistingAccount(null!, Fields()));
+        Assert.Throws<ArgumentException>(() => sut.TrackExistingAccount(string.Empty, Fields()));
+        Assert.Throws<ArgumentNullException>(() => sut.TrackExistingAccount("CUST0001", null!));
+    }
+
+
+
+    [Fact]
     public async Task Entries_and_Accounts_when_activity_follows_return_snapshots_that_do_not_change()
     {
         var (sut, _) = await CreateAsync();
