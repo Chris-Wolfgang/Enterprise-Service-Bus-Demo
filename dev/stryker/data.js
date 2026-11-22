@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794750103383,
+  "lastUpdate": 1795357020154,
   "repoUrl": "https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo",
   "entries": {
     "Mutation score": [
@@ -95,6 +95,43 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo/commit/11c52cfe85bfc30ef6c4590690154ead1753bf41"
         },
         "date": 1794750101320,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "Mutation score (tests/EsbDemo.Core.Tests.Unit (defaults))",
+            "value": 100,
+            "unit": "%"
+          },
+          {
+            "name": "Mutation score (tests/EsbDemo.Tests.Fuzz (defaults))",
+            "value": 0,
+            "unit": "%"
+          },
+          {
+            "name": "Mutation score (tests/EsbDemo.Web.Tests.Unit (defaults))",
+            "value": 0,
+            "unit": "%"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Chris Wolfgang",
+            "username": "Chris-Wolfgang",
+            "email": "210299580+Chris-Wolfgang@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "d25ccdd956b4060f554c1408e08a6e9cc3de53f8",
+          "message": "fix(web): observe Home's monitor refresh instead of discarding it (#268)\n\nOnMonitorChanged dropped the task InvokeAsync returned, so a JS interop\nfault (for example on a disconnected circuit) was never observed.\nRefreshAsync awaits it, ignores JSDisconnectedException and\nOperationCanceledException, and logs anything else through ILogger<Home>.\n\nCloses #260\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-21T01:53:09Z",
+          "url": "https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo/commit/d25ccdd956b4060f554c1408e08a6e9cc3de53f8"
+        },
+        "date": 1795357018138,
         "tool": "customBiggerIsBetter",
         "benches": [
           {
