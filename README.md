@@ -6,6 +6,7 @@ An interactive demo of how an ESB can help your organization connect various sys
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?logo=github)](https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo/badge)](https://scorecard.dev/viewer/?uri=github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo)
+[![Reproducible build](https://img.shields.io/badge/Reproducible%20build-how%20to%20verify-blue.svg)](docs/REPRODUCIBLE-BUILD.md)
 
 ---
 
@@ -73,6 +74,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 - **GitHub Repository:** [https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo](https://github.com/Chris-Wolfgang/Enterprise-Service-Bus-Demo)
 - **API Documentation:** https://Chris-Wolfgang.github.io/Enterprise-Service-Bus-Demo/
 - **Formatting Guide:** [docs/README-FORMATTING.md](docs/README-FORMATTING.md)
+- **Verifying a release build:** [docs/REPRODUCIBLE-BUILD.md](docs/REPRODUCIBLE-BUILD.md)
 - **Contributing Guide:** [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
@@ -178,7 +180,7 @@ docfx build --serve
 - `docfx_project/` - DocFX configuration and source files; the site is built into `docfx_project/_site`
 - `docfx_project/index.md` - Main landing page content
 - `docfx_project/docs/` - Additional documentation articles
-- `docs/` - Hand-written repository guides (formatting, release workflow, workflow security, docs version picker)
+- `docs/` - Hand-written repository guides (formatting, release workflow, reproducible builds, workflow security, docs version picker)
 
 ---
 
