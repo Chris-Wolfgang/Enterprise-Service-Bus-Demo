@@ -11,9 +11,13 @@ The workflow triggers when you **publish a GitHub Release**. It:
 - Runs every test project on every target framework on Windows and enforces the coverage gates:
   95% line coverage for each `src/` assembly and 100% for each `tests/` assembly (the same
   `CODECOV_MINIMUM` / `CODECOV_TEST_MINIMUM` gates as `pr.yaml`)
-- Publishes `EsbDemo.Web` as a self-contained build for `win-x64`, `linux-x64` and `osx-arm64`,
-  zips each one and attaches the zips to the release
-- Records a SLSA build-provenance attestation for the zips and attaches the provenance bundle too
+- Publishes each app in `.github/release-apps.json` (today `EsbDemo.Web`, self-contained, for `win-x64`,
+  `linux-x64` and `osx-arm64`), zips each one and attaches the zips to the release
+- Attaches `SHA256SUMS.txt` (every file inside each zip, plus each zip) and `BUILD-MANIFEST.txt` (SDK,
+  runner image, build path, publish flags), so a rebuild can be checked against what shipped
+  ([REPRODUCIBLE-BUILD.md](REPRODUCIBLE-BUILD.md))
+- Records a SLSA build-provenance attestation for the zips, `SHA256SUMS.txt` and `BUILD-MANIFEST.txt`,
+  and attaches the provenance bundle too
 - Builds and deploys the DocFX documentation site for the release tag
 
 ## Required Configuration
@@ -59,17 +63,20 @@ Ensure the ruleset:
 2. **pack-and-validate** (Windows): runs `dotnet pack`; with no packable project it reports
    `has-packages=false`, so `publish-nuget` and `update-release-artifacts` are skipped
 3. **verify-docs-build** (Windows): checks that the DocFX site builds
-4. **publish-app** (Ubuntu, one job per runtime): `dotnet publish src/EsbDemo.Web/EsbDemo.Web.csproj
-   --runtime <rid> --self-contained true` and zips the output as `EsbDemo.Web-<tag>-<rid>.zip`
-5. **attach-app** (Ubuntu): attests build provenance for the zips and uploads the zips plus the
-   `.intoto.jsonl` provenance bundle to the release
-6. **trigger-docs**: builds and deploys the documentation for the release tag to `gh-pages`
+4. **plan-apps** (Ubuntu): expands `.github/release-apps.json` into one publish job per app and runtime
+5. **publish-app** (Ubuntu, one job per app and runtime): `dotnet publish <project> --runtime <rid>
+   --self-contained <bool> -p:PublishSingleFile=<bool>`, hashes every published file and zips the output
+   as `<app>-<tag>-<rid>.zip`
+6. **attach-app** (Ubuntu): writes `SHA256SUMS.txt` and `BUILD-MANIFEST.txt`, attests build provenance
+   for the zips and both files, and uploads them plus the `.intoto.jsonl` provenance bundle to the release
+7. **trigger-docs**: builds and deploys the documentation for the release tag to `gh-pages`
 
 ### Monitoring the Workflow
 
 - **Actions tab:** shows the workflow progress
 - **Artifacts:** the coverage report and the per-runtime app zips
-- **Releases:** the zips and the provenance bundle appear on the release when `attach-app` finishes
+- **Releases:** the zips, `SHA256SUMS.txt`, `BUILD-MANIFEST.txt` and the provenance bundle appear on the
+  release when `attach-app` finishes
 
 ## Troubleshooting
 
@@ -107,8 +114,10 @@ Ensure the ruleset:
 5. Click **"Publish release"**
 
 **After the workflow completes:**
-- [ ] The three app zips and the provenance bundle are attached to the release
+- [ ] The three app zips, `SHA256SUMS.txt`, `BUILD-MANIFEST.txt` and the provenance bundle are attached
+  to the release
 - [ ] `gh attestation verify <zip> --repo Chris-Wolfgang/Enterprise-Service-Bus-Demo` succeeds
+- [ ] `sha256sum -c --ignore-missing SHA256SUMS.txt` passes next to the downloaded zips
 - [ ] The documentation site shows the new version
 
 ## Workflow Architecture
@@ -123,7 +132,7 @@ validate-release (Windows): build, test all TFMs, 95% src / 100% tests coverage 
         │         │ has-packages == 'true' only
         │         └──► publish-nuget ──► update-release-artifacts   (skipped: nothing packable)
         │
-        ├──► publish-app (win-x64, linux-x64, osx-arm64) ──► attach-app (attest + upload zips)
+        ├──► plan-apps ──► publish-app (per app x runtime) ──► attach-app (sums + manifest, attest, upload)
         │
         └──► trigger-docs (docfx.yaml → gh-pages)
 ```
