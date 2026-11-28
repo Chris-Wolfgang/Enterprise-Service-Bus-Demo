@@ -834,18 +834,48 @@ jobs:
   # This repository ships an application, not a library (#169). Both src projects are
   # IsPackable=false, so pack-and-validate reports has-packages=false and the NuGet jobs
   # (publish-nuget, update-release-artifacts) skip. The release artifact is instead a
-  # self-contained `dotnet publish` of EsbDemo.Web per runtime, zipped and attached to the
-  # GitHub Release by attach-app below, with a build-provenance attestation.
-  publish-app:
-    name: Publish App (${{ matrix.rid }})
+  # self-contained `dotnet publish` of each app in .github/release-apps.json per runtime,
+  # zipped and attached to the GitHub Release by attach-app below, together with
+  # SHA256SUMS.txt, BUILD-MANIFEST.txt and a build-provenance attestation covering all of
+  # them (app variant of the reproducible-builds standard, #221; docs/REPRODUCIBLE-BUILD.md).
+  # reproducible-build.yaml publishes the same list twice and compares, so the PR gate
+  # checks exactly what ships.
+  plan-apps:
+    name: Read the App List
     needs: validate-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Expand apps x runtimes into the publish matrix
+        id: plan
+        run: |
+          set -euo pipefail
+          matrix=$(jq -c '{include: [.apps[] as $a | $a.runtimes[] | {app: $a.name, project: $a.project, rid: ., self_contained: ($a.selfContained | tostring), single_file: ($a.singleFile | tostring)}]}' .github/release-apps.json)
+          count=$(jq '.include | length' <<< "$matrix")
+          if [ "$count" -eq 0 ]; then
+            echo "::error::.github/release-apps.json declares no app and runtime to publish."
+            exit 1
+          fi
+          echo "Publishing $count app/runtime pair(s): $matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  publish-app:
+    name: Publish App (${{ matrix.app }} ${{ matrix.rid }})
+    needs: plan-apps
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: true
-      matrix:
-        rid: [win-x64, linux-x64, osx-arm64]
+      matrix: ${{ fromJSON(needs.plan-apps.outputs.matrix) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -859,32 +889,52 @@ jobs:
             10.0.x
             11.0.x
 
-      - name: Publish self-contained build and zip it
+      # Hashes are taken from the exact files that go into the zip, in this job, so what a
+      # verifier compares against is what shipped. sha256sum format ("<hash>  <key>", LF),
+      # keyed <archive-name>/<path inside the archive>.
+      - name: Publish self-contained build, hash its files and zip it
         shell: bash
         env:
+          APP: ${{ matrix.app }}
+          PROJECT: ${{ matrix.project }}
           RID: ${{ matrix.rid }}
+          SELF_CONTAINED: ${{ matrix.self_contained }}
+          SINGLE_FILE: ${{ matrix.single_file }}
           TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          dotnet publish src/EsbDemo.Web/EsbDemo.Web.csproj \
+          export LC_ALL=C
+          archive="${APP}-${TAG_NAME}-${RID}"
+          dotnet publish "$PROJECT" \
             --configuration Release \
             --runtime "$RID" \
-            --self-contained true \
-            --output "publish/$RID"
-          mkdir -p app
-          zip_path="$PWD/app/EsbDemo.Web-${TAG_NAME}-${RID}.zip"
-          (cd "publish/$RID" && zip -qr "$zip_path" .)
+            --self-contained "$SELF_CONTAINED" \
+            -p:PublishSingleFile="$SINGLE_FILE" \
+            --output "publish/$archive"
+          mkdir -p app meta
+          (cd "publish/$archive" && find . -type f | sed 's|^\./||' | sort) | while IFS= read -r f; do
+            printf '%s  %s/%s\n' "$(sha256sum < "publish/$archive/$f" | cut -d' ' -f1)" "$archive" "$f"
+          done > "meta/$archive.sha256"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$archive.zip" "$APP" "$PROJECT" "$RID" "$SELF_CONTAINED" "$SINGLE_FILE" \
+            "$(dotnet --version)" "${ImageOS:-unknown} ${ImageVersion:-unknown}" > "meta/$archive.tsv"
+          (cd "publish/$archive" && zip -qr "../../app/$archive.zip" .)
+          echo "$(wc -l < "meta/$archive.sha256") files hashed into meta/$archive.sha256"
           ls -l app
 
       - name: Upload app artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: app-${{ matrix.rid }}
-          path: ./app/*.zip
+          name: app-${{ matrix.app }}-${{ matrix.rid }}
+          path: |
+            ./app/*.zip
+            ./meta/*
           retention-days: 90
           if-no-files-found: error
 
-  # Attaches the per-runtime zips and their provenance bundle to the GitHub Release.
+  # Writes SHA256SUMS.txt and BUILD-MANIFEST.txt from the publish jobs' own hashes, then
+  # attaches the zips, both files and the provenance bundle (all of them attested) to the
+  # GitHub Release.
   attach-app:
     name: Attach App to Release
     needs: publish-app
@@ -899,17 +949,70 @@ jobs:
         with:
           pattern: app-*
           merge-multiple: true
-          path: ./app
+          path: ./dl
 
-      - name: Attest build provenance for the app zips
+      # SHA256SUMS.txt: every file inside every zip (keyed <archive-name>/<path>), then one line
+      # per zip (keyed by its file name) so a download checks with `sha256sum -c --ignore-missing`.
+      # The zip containers carry timestamps and are not reproducible: their lines are download
+      # integrity only; a rebuild is compared on the files inside.
+      - name: Write SHA256SUMS.txt and BUILD-MANIFEST.txt
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          shopt -s nullglob
+          zips=(./dl/app/*.zip)
+          sums=(./dl/meta/*.sha256)
+          rows=(./dl/meta/*.tsv)
+          if [ "${#zips[@]}" -eq 0 ] || [ "${#zips[@]}" -ne "${#sums[@]}" ] || [ "${#zips[@]}" -ne "${#rows[@]}" ]; then
+            echo "::error::Expected one zip, one hash list and one manifest row per app/runtime; got ${#zips[@]}/${#sums[@]}/${#rows[@]}."
+            exit 1
+          fi
+          mkdir -p app
+          cp "${zips[@]}" app/
+          {
+            cat "${sums[@]}" | sort -k2
+            (cd app && sha256sum -- *.zip)
+          } > app/SHA256SUMS.txt
+          {
+            echo "Release:        $TAG_NAME"
+            echo "Commit:         $COMMIT_SHA"
+            echo "Repository:     $GITHUB_REPOSITORY"
+            echo "Build path:     $GITHUB_WORKSPACE"
+            echo "Build flags:    Configuration=Release CI=true ContinuousIntegrationBuild=true Deterministic=true (SDK default)"
+            echo "App list:       .github/release-apps.json at the commit above"
+            echo
+            echo "Archives (one per app and runtime identifier):"
+            sort "${rows[@]}" | while IFS=$'\t' read -r zip app project rid self_contained single_file sdk image; do
+              echo "  $zip"
+              echo "    app: $app  project: $project  runtime: $rid"
+              echo "    publish flags: --configuration Release --runtime $rid --self-contained $self_contained -p:PublishSingleFile=$single_file"
+              echo "    SDK: $sdk  runner image: $image"
+            done
+            echo
+            echo "SHA256SUMS.txt lists every file inside each archive, keyed <archive-name>/<path>, and is"
+            echo "what a rebuild is compared against (docs/REPRODUCIBLE-BUILD.md). Rebuild at the build"
+            echo "path above: the Razor generator embeds absolute .razor paths in EsbDemo.Web.pdb. The"
+            echo "Last-Modified values in <app>.staticwebassets.endpoints.json are build times and differ"
+            echo "on every build. The archives' own lines are for download integrity only."
+          } > app/BUILD-MANIFEST.txt
+          echo "SHA256SUMS.txt: $(wc -l < app/SHA256SUMS.txt) lines"
+          cat app/BUILD-MANIFEST.txt
+
+      - name: Attest build provenance for the app zips, hashes and manifest
         id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         with:
-          subject-path: './app/*.zip'
+          subject-path: |
+            ./app/*.zip
+            ./app/SHA256SUMS.txt
+            ./app/BUILD-MANIFEST.txt
 
       # `gh` is pre-installed on the runner, so no third-party action is needed
       # to upload release assets (zizmor superfluous-actions).
-      - name: Attach app zips and provenance to release
+      - name: Attach app zips, hashes, manifest and provenance to release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -923,11 +1026,7 @@ jobs:
           fi
           cp "$BUNDLE_PATH" "./app/${GITHUB_REPOSITORY##*/}-app-${TAG_NAME}.intoto.jsonl"
           shopt -s nullglob
-          files=(./app/*.zip ./app/*.intoto.jsonl)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "::error::No app zips were downloaded"
-            exit 1
-          fi
+          files=(./app/*.zip ./app/SHA256SUMS.txt ./app/BUILD-MANIFEST.txt ./app/*.intoto.jsonl)
           echo "Uploading ${#files[@]} asset(s) to release $TAG_NAME"
           gh release upload "$TAG_NAME" "${files[@]}" --clobber
 
