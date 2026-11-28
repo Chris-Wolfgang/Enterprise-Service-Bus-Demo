@@ -1,0 +1,12 @@
+{
+  "$comment": "The apps this repository ships. release.yaml publishes, archives, hashes and attests exactly these; reproducible-build.yaml publishes the same list twice and compares. One entry per app, one archive per runtime. See docs/REPRODUCIBLE-BUILD.md and claude-sessions standards/reproducible-builds.md (app variant, #221).",
+  "apps": [
+    {
+      "name": "EsbDemo.Web",
+      "project": "src/EsbDemo.Web/EsbDemo.Web.csproj",
+      "runtimes": ["win-x64", "linux-x64", "osx-arm64"],
+      "selfContained": true,
+      "singleFile": false
+    }
+  ]
+}
