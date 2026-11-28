@@ -1,0 +1,219 @@
+name: Reproducible Build
+
+# Proves the same commit builds and publishes to the same bytes - the app variant of the fleet
+# standard (claude-sessions standards/reproducible-builds.md, decided 2026-11-20; issue #221).
+# A verifier repeats the same steps by hand with docs/REPRODUCIBLE-BUILD.md.
+#
+# Gate (fails the check), on ubuntu-latest: build every src/ project and publish every app and
+# runtime declared in .github/release-apps.json (the list release.yaml ships), hash the results,
+# `git clean -xdf`, do it all again, and require:
+#   - every project's own .dll and .pdb, per TFM, byte-identical;
+#   - every published file, per app and runtime, byte-identical.
+# Both passes use the same checkout path on purpose: the Razor source generator writes the
+# absolute path of each .razor file into the generated code it embeds in EsbDemo.Web.pdb, so a
+# build from another directory gives a different .pdb (and so a different .dll, which carries the
+# .pdb's id). The release records its build path in BUILD-MANIFEST.txt for that reason.
+# One published file is compared after normalizing: the SDK writes each static asset's build
+# time into the Last-Modified headers of <app>.staticwebassets.endpoints.json, so those values are
+# blanked before that file is hashed. Everything else is compared as is.
+#
+# Report (never fails): the same build and publish once on windows-latest, diffed against the
+# Ubuntu pass in the job summary. Cross-OS identity is reported, not gated (fleet bar, 2026-10-31).
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reproducible-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Reproducible Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            passes: 2
+          - os: windows-latest
+            passes: 1
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: 'true'
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same SDK set as release.yaml's publish-app job; global.json picks the one used.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.x
+
+      - name: Build, publish and hash
+        env:
+          PASSES: ${{ matrix.passes }}
+          OS_NAME: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          out="$RUNNER_TEMP/reproducible"
+          mkdir -p "$out"
+
+          # One line per file, sha256sum format, keyed by $2/<path relative to $1>.
+          hash_dir() {
+            (cd "$1" && find . -type f | sed 's|^\./||' | sort) | while IFS= read -r f; do
+              if [[ "$f" == *.staticwebassets.endpoints.json ]]; then
+                h=$(sed -E 's/("Name":"Last-Modified","Value":")[^"]*"/\1"/g' "$1/$f" | sha256sum | cut -d' ' -f1)
+              else
+                h=$(sha256sum < "$1/$f" | cut -d' ' -f1)
+              fi
+              printf '%s  %s/%s\n' "$h" "$2" "$f"
+            done
+          }
+
+          mapfile -t projects < <(find src -name '*.csproj' | sort)
+          # tr: jq on windows-latest ends its lines with CRLF.
+          mapfile -t apps < <(jq -r '.apps[] as $a | $a.runtimes[] | [$a.name, $a.project, ., ($a.selfContained | tostring), ($a.singleFile | tostring)] | @tsv' .github/release-apps.json | tr -d '\r')
+          if [ "${#projects[@]}" -eq 0 ] || [ "${#apps[@]}" -eq 0 ]; then
+            echo "::error::Nothing to compare: ${#projects[@]} src/ project(s), ${#apps[@]} app/runtime pair(s) in .github/release-apps.json."
+            exit 1
+          fi
+          echo "dotnet $(dotnet --version); ${#projects[@]} src/ project(s); ${#apps[@]} app/runtime pair(s)"
+
+          for pass in $(seq 1 "$PASSES"); do
+            git clean -xdfq
+            : > "$out/build-$pass.sha256"
+            for p in "${projects[@]}"; do
+              dotnet build "$p" --configuration Release
+              name=$(basename "$p" .csproj)
+              bin="$(dirname "$p")/bin/Release"
+              before=$(wc -l < "$out/build-$pass.sha256")
+              for tfm_dir in "$bin"/*/; do
+                tfm=$(basename "$tfm_dir")
+                for f in "$tfm_dir$name.dll" "$tfm_dir$name.pdb"; do
+                  if [ -f "$f" ]; then
+                    printf '%s  %s/%s/%s\n' "$(sha256sum < "$f" | cut -d' ' -f1)" "$name" "$tfm" "$(basename "$f")" >> "$out/build-$pass.sha256"
+                  fi
+                done
+              done
+              if [ "$(wc -l < "$out/build-$pass.sha256")" -eq "$before" ]; then
+                echo "::error::No $name.dll or $name.pdb under $bin/<tfm>/ - nothing was compared for $p."
+                exit 1
+              fi
+            done
+
+            : > "$out/publish-$pass.sha256"
+            for line in "${apps[@]}"; do
+              IFS=$'\t' read -r app project rid self_contained single_file <<< "$line"
+              dir="publish/$app-$rid"
+              dotnet publish "$project" \
+                --configuration Release \
+                --runtime "$rid" \
+                --self-contained "$self_contained" \
+                -p:PublishSingleFile="$single_file" \
+                --output "$dir"
+              hash_dir "$dir" "$app-$rid" >> "$out/publish-$pass.sha256"
+            done
+          done
+
+          cp "$out/build-1.sha256" "build-$OS_NAME.sha256"
+          cp "$out/publish-1.sha256" "publish-$OS_NAME.sha256"
+          echo "Hashed $(wc -l < "$out/build-1.sha256") assemblies/PDBs and $(wc -l < "$out/publish-1.sha256") published files."
+
+          if [ "$PASSES" -lt 2 ]; then
+            exit 0
+          fi
+
+          {
+            echo "## Same-OS reproducibility ($OS_NAME, two passes)"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          failed=0
+          for kind in build publish; do
+            total=$(wc -l < "$out/$kind-1.sha256")
+            if diff "$out/$kind-1.sha256" "$out/$kind-2.sha256" > "$out/$kind.diff"; then
+              echo "- $kind: $total files byte-identical across both passes." | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              failed=1
+              echo "::error::$kind outputs differ between the two passes:"
+              cat "$out/$kind.diff"
+              {
+                echo "- **$kind: the two passes differ.**"
+                echo
+                echo '```'
+                cat "$out/$kind.diff"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          exit "$failed"
+
+      - name: Keep the hashes
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: hashes-${{ matrix.os }}
+          path: '*.sha256'
+          retention-days: 7
+          if-no-files-found: ignore
+
+  report:
+    name: Cross-OS diff (informational)
+    needs: build
+    if: always() && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch hashes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: hashes-*
+          merge-multiple: true
+
+      # Reported, never gated: this step always exits 0.
+      - name: Diff Windows against Ubuntu
+        run: |
+          export LC_ALL=C
+          {
+            echo "## Cross-OS reproducibility (reported, not gated)"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          for kind in build publish; do
+            win="$kind-windows-latest.sha256"
+            lin="$kind-ubuntu-latest.sha256"
+            if [ ! -f "$win" ] || [ ! -f "$lin" ]; then
+              echo "- $kind: one side's hashes are missing; see the build jobs." >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            awk '{ print $2, $1 }' "$win" | sort > win.txt
+            awk '{ print $2, $1 }' "$lin" | sort > lin.txt
+            join -o 0,1.2,2.2 win.txt lin.txt > both.txt || true
+            total=$(wc -l < both.txt)
+            same=$(awk '$2 == $3' both.txt | wc -l)
+            {
+              echo "- $kind: $same of $total files produced on both operating systems are byte-identical."
+              if [ "$same" -ne "$total" ]; then
+                echo
+                echo "  | File | Windows | Ubuntu |"
+                echo "  |---|---|---|"
+                awk '$2 != $3 { printf "  | `%s` | `%s` | `%s` |\n", $1, substr($2,1,12), substr($3,1,12) }' both.txt | head -50
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit 0
